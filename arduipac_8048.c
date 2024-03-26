@@ -1,36 +1,40 @@
 #include <stdio.h>
 
-#include "types.h"
-#include "vmachine.h"
-#include "keyboard.h"
-#include "vdc.h"
-#include "cpu.h"
+#include "arduipac_vmachine.h"
+#include "arduipac_8245.h"
+#include "arduipac_8048.h"
 
 #define push(d) {intRAM[sp++] = (d); if (sp > 23) sp = 8;}
 #define pull() (sp--, (sp < 8)?(sp=23):0, intRAM[sp])
 #define make_psw() {psw = (cy << 7) | ac | f0 | bs | 0x08; psw = psw | ((sp - 8) >> 1);}
-#define illegal(o) {}
+#define illegal(i) {}
 #define undef(i) {}
-#define ROM(adr) (rom[(adr) & 0xfff])
+#define ROM(addr) (rom[(addr) & 0xFFF])
 
-void init_cpu ()
+void init_8048 ()
 {
-  pc = 0;
-  sp = 8;
+  pc = 0x00;
+  sp = 0x08;
   bs = 0;
-  p1 = p2 = 0xFF;
-  ac = cy = f0 = 0;
-  A11 = A11ff = 0;
+  p1 = 0xFF;
+  p2 = 0xFF;
+  ac = 0;
+  cy = 0;
+  f0 = 0;
+  f1 = 0;
   timer_on = 0;
   count_on = 0;
-  reg_pnt = 0;
+  reg_pnt = 0x00;
+  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
+  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
+  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
+  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
   tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
 }
 
-void
-ext_IRQ ()
+void ext_irq ()
 {
-  int_clk = 5;			/* length of pulse on /INT */
+  int_clk = 5;
   if (xirq_en && !irq_ex)
     {
       irq_ex = 1;
@@ -40,15 +44,12 @@ ext_IRQ ()
       push (pc & 0xFF);
       push (((pc & 0xF00) >> 8) | (psw & 0xF0));
       pc = 0x03;
-      A11ff = A11;
-      A11 = 0;
     }
   if (pendirq && (!xirq_en))
     xirq_pend = 1;
 }
 
-void
-tim_IRQ ()
+void timer_irq ()
 {
   if (tirq_en && !irq_ex)
     {
@@ -59,19 +60,15 @@ tim_IRQ ()
       push (pc & 0xFF);
       push (((pc & 0xF00) >> 8) | (psw & 0xF0));
       pc = 0x07;
-      A11ff = A11;
-      A11 = 0;
     }
-  if (pendirq && (!tirq_en))
-    tirq_pend = 1;
+  if (pendirq && (!tirq_en)) tirq_pend = 1;
 }
 
-void
-cpu_exec ()
+void exec_8048 ()
 {
-  Byte op;
-  ADDRESS adr;
-  Byte dat;
+  uint8_t op;
+  uint16_t adr;
+  uint8_t dat;
   int temp;
 
   for (;;)
@@ -131,7 +128,7 @@ cpu_exec ()
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x04:		/* JMP */
-	  pc = ROM (pc) | A11;
+	  pc = ROM (pc);
 	  clk += 2;
 	  break;
 	case 0x05:		/* EN I */
@@ -201,7 +198,7 @@ cpu_exec ()
 
 	case 0x14:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | A11;
+	  adr = ROM (pc);
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
@@ -275,7 +272,7 @@ cpu_exec ()
 	  break;
 
 	case 0x24:		/* JMP */
-	  pc = ROM (pc) | 0x100 | A11;
+	  pc = ROM (pc) | 0x100;
 	  clk += 2;
 	  break;
 	case 0x25:		/* EN TCNTI */
@@ -370,7 +367,7 @@ cpu_exec ()
 	  break;
 	case 0x34:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x100 | A11;
+	  adr = ROM (pc) | 0x100;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
@@ -435,7 +432,7 @@ cpu_exec ()
 	  acc = acc | ROM (pc++);
 	  break;
 	case 0x44:		/* JMP */
-	  pc = ROM (pc) | 0x200 | A11;
+	  pc = ROM (pc) | 0x200;
 	  clk += 2;
 	  break;
 	case 0x45:		/* STRT CNT */
@@ -512,7 +509,7 @@ cpu_exec ()
 	  break;
 	case 0x54:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x200 | A11;
+	  adr = ROM (pc) | 0x200;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
@@ -607,7 +604,7 @@ cpu_exec ()
 	  itimer = acc;
 	  break;
 	case 0x64:		/* JMP */
-	  pc = ROM (pc) | 0x300 | A11;
+	  pc = ROM (pc) | 0x300;
 	  clk += 2;
 	  break;
 	case 0x65:		/* STOP TCNT */
@@ -748,7 +745,7 @@ cpu_exec ()
 	  break;
 	case 0x74:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x300 | A11;
+	  adr = ROM (pc) | 0x300;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
@@ -888,7 +885,7 @@ cpu_exec ()
 	  pc = pc | pull ();
 	  break;
 	case 0x84:		/* JMP */
-	  pc = ROM (pc) | 0x400 | A11;
+	  pc = ROM (pc) | 0x400;
 	  clk += 2;
 	  break;
 	case 0x85:		/* CLR F0 */
@@ -962,11 +959,10 @@ cpu_exec ()
 	    reg_pnt = 0;
 	  pc = pc | pull ();
 	  irq_ex = 0;
-	  A11 = A11ff;
 	  break;
 	case 0x94:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x400 | A11;
+	  adr = ROM (pc) | 0x400;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
@@ -1030,7 +1026,7 @@ cpu_exec ()
 	  clk += 2;
 	  break;
 	case 0xA4:		/* JMP */
-	  pc = ROM (pc) | 0x500 | A11;
+	  pc = ROM (pc) | 0x500;
 	  clk += 2;
 	  break;
 	case 0xA5:		/* CLR F1 */
@@ -1096,7 +1092,7 @@ cpu_exec ()
 	  break;
 	case 0xB4:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x500 | A11;
+	  adr = ROM (pc) | 0x500;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
@@ -1148,7 +1144,7 @@ cpu_exec ()
 	  clk += 2;
 	  break;
 	case 0xC4:		/* JMP */
-	  pc = ROM (pc) | 0x600 | A11;
+	  pc = ROM (pc) | 0x600;
 	  clk += 2;
 	  break;
 	case 0xC5:		/* SEL RB0 */
@@ -1222,7 +1218,7 @@ cpu_exec ()
 	  break;
 	case 0xD4:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x600 | A11;
+	  adr = ROM (pc) | 0x600;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
@@ -1287,12 +1283,10 @@ cpu_exec ()
 	  clk += 2;
 	  break;
 	case 0xE4:		/* JMP */
-	  pc = ROM (pc) | 0x700 | A11;
+	  pc = ROM (pc) | 0x700;
 	  clk += 2;
 	  break;
 	case 0xE5:		/* SEL MB0 */
-	  A11 = 0;
-	  A11ff = 0;
 	  clk++;
 	  break;
 	case 0xE6:		/* JNC address */
@@ -1427,22 +1421,13 @@ cpu_exec ()
 	case 0xF4:		/* CALL */
 	  clk += 2;
 	  make_psw ();
-	  adr = ROM (pc) | 0x700 | A11;
+	  adr = ROM (pc) | 0x700;
 	  pc++;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
 	  pc = adr;
 	  break;
 	case 0xF5:		/* SEL MB1 */
-	  if (irq_ex)
-	    {
-	      A11ff = 0x800;
-	    }
-	  else
-	    {
-	      A11 = 0x800;
-	      A11ff = 0x800;
-	    }
 	  clk++;
 	  break;
 	case 0xF6:		/* JC address */
@@ -1508,22 +1493,22 @@ cpu_exec ()
 	int_clk = 0;
 
       if (xirq_pend)
-	ext_IRQ ();
+	ext_irq ();
       if (tirq_pend)
-	tim_IRQ ();
+	timer_irq ();
 
       if (h_clk > LINECNT - 1)
 	{
 	  h_clk -= LINECNT;
 	  if (enahirq && (VDCwrite[0xA0] & 0x01))
-	    ext_IRQ ();
+	    ext_irq ();
 	  if (count_on && mstate == 0)
 	    {
 	      itimer++;
 	      if (itimer == 0)
 		{
 		  t_flag = 1;
-		  tim_IRQ ();
+		  timer_irq ();
 		  draw_region ();
 		}
 	    }
@@ -1539,7 +1524,7 @@ cpu_exec ()
 	      if (itimer == 0)
 		{
 		  t_flag = 1;
-		  tim_IRQ ();
+		  timer_irq ();
 		}
 	    }
 	}

@@ -1,7 +1,7 @@
 #include <time.h>
 #include <SDL/SDL.h>
 
-#include "timefunc.h"
+#include "arduipac_timefunc.h"
 
 static time_t first = 0;
 

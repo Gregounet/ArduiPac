@@ -1,8 +1,7 @@
-#include <errno.h>
 #include <string.h>
 
-#include "o2em_sdl.h"
-#include "o2em2.h"
+#include "arduipac_sdl.h"
+#include "arduipac.h"
 
 #include <SDL/SDL_gfxPrimitives.h>
 
@@ -44,27 +43,6 @@ BITMAP * create_bitmap (int w, int h)
 void clear (BITMAP * bitmap)
 {
   if (bitmap != NULL) SDL_FillRect (bitmap, 0, 0);
-}
-
-int poll_keyboard ()
-{
-  SDL_Event event;
-
-  SDL_PumpEvents ();
-  while (SDL_PollEvent (&event) > 0)
-    {
-      switch (event.type)
-	{
-	case SDL_QUIT:
-	  o2em_clean_quit (EXIT_SUCCESS);
-	default:
-	  break;
-	}
-    }
-  key = SDL_GetKeyState (NULL);
-  if (key == NULL)
-    return O2EM_FAILURE;
-  return O2EM_SUCCESS;
 }
 
 void set_color_depth (int depth)

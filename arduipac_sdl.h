@@ -137,12 +137,11 @@ int SCREEN_H;
 #define SWITCH_PAUSE 1
 #define SYSTEM_AUTODETECT  0
 
-typedef int AUDIOSTREAM;
-typedef int SAMPLE;
 typedef int FONT;
 typedef SDL_Surface BITMAP;
 
 extern SDL_Color colors[256];
+
 struct Axis
 {
   int d1, d2;
@@ -166,19 +165,9 @@ struct Joystick joy[2];
 int DISPLAY_DEPTH;
 void *font;
 
-#define KEY_MAX SDLK_LAST
-Uint8 *key;
-
 BITMAP *screen;
 
-int key_shifts;
-
 int num_joysticks;
-
-int install_keyboard ();
-int poll_keyboard ();
-int keyboard_needs_poll ();
-void remove_keyboard ();
 
 int install_joystick (int joytype);
 

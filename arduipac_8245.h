@@ -1,7 +1,7 @@
-#ifndef __VDC_H
-#define __VDC_H
+#ifndef ARDUIPAC_8245_H
+#define ARDUIPAC_8245_H
 
-#include "o2em_sdl.h"
+#include "arduipac_sdl.h"
 
 #define BMPW 340
 #define BMPH 250
@@ -16,12 +16,11 @@
 #define BOX_T     ((SCREEN_H - BOX_H) / 2)
 #define BOX_B     ((SCREEN_H + BOX_H) / 2)
 
-extern Byte coltab[];
+extern uint8_t coltab[];
 extern long clip_low;
 extern long clip_high;
-extern int show_fps;
 
-Byte *col;
+uint8_t *col;
 
 int init_display ();
 void draw_display ();
@@ -35,4 +34,4 @@ void display_msg (char *msg, int waits);
 void clear_collision ();
 void clearscr ();
 
-#endif
+#endif /* ARDUIPAC_8245_H */

@@ -1,29 +1,26 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
-#include <errno.h>
 
-#include "types.h"
-#include "cpu.h"
-#include "keyboard.h"
-#include "o2em2.h"
-#include "vdc.h"
-#include "timefunc.h"
-#include "vmachine.h"
-#include "o2em_sdl.h"
+#include "arduipac_8048.h"
+#include "arduipac_8245.h"
+#include "arduipac.h"
+#include "arduipac_timefunc.h"
+#include "arduipac_vmachine.h"
+#include "arduipac_sdl.h"
 
-static Byte x_latch, y_latch;
+static uint8_t x_latch, y_latch;
 static int romlatch = 0;
-static Byte line_count;
+static uint8_t line_count;
 static int fps = FPS_NTSC;
 
-static Byte snapedlines[MAXLINES + 2 * MAXSNAP][256][2];
+static uint8_t snapedlines[MAXLINES + 2 * MAXSNAP][256][2];
 
 int evblclk = EVBLCLK_NTSC;
 
 struct resource app_data;
 int frame = 0;
-Byte dbstick1, dbstick2;
+uint8_t dbstick1, dbstick2;
 
 int int_clk;			/* counter for length of /INT pulses */
 int master_clk;			/* Master clock */
@@ -36,31 +33,20 @@ int mstate;
 int pendirq = 0;
 int enahirq = 1;
 int useforen = 0;
-long regionoff = 0xffff;
+long regionoff = 0xFFFF;
 int mxsnap = 2;
 int sproff = 0;			/* sprite offset */
-int tweakedaudio = 0;
 
-Byte rom_table[8][4096];
+uint8_t rom_table[8][4096];
 
-Byte intRAM[64];
-Byte extRAM[256];
-Byte extROM[1024];
+uint8_t intRAM[64];
+uint8_t extRAM[256];
+uint8_t extROM[1024];
 
-Byte VDCwrite[256];
-Byte ColorVector[MAXLINES];
-Byte AudioVector[MAXLINES];
-Byte *rom;
-
-static unsigned int key_map[6][8] = {
-  {KEY_0, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7},
-  {KEY_8, KEY_9, 0, 0, KEY_SPACE, KEY_SLASH, KEY_L, KEY_P},
-  {KEY_PLUS_PAD, KEY_W, KEY_E, KEY_R, KEY_T, KEY_U, KEY_I, KEY_O},
-  {KEY_Q, KEY_S, KEY_D, KEY_F, KEY_G, KEY_H, KEY_J, KEY_K},
-  {KEY_A, KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_M, KEY_STOP},
-  {KEY_MINUS, KEY_ASTERISK, KEY_SLASH_PAD, KEY_EQUALS, KEY_Y, KEY_N, KEY_DEL,
-   KEY_ENTER}
-};
+uint8_t VDCwrite[256];
+uint8_t ColorVector[MAXLINES];
+uint8_t AudioVector[MAXLINES];
+uint8_t *rom;
 
 static void setvideomode (int t);
 
@@ -68,7 +54,7 @@ void run ()
 {
   while (!key_done)
     {
-      cpu_exec ();
+      exec_8048 ();
     }
   close_display ();
 }
@@ -76,7 +62,7 @@ void run ()
 void handle_vbl ()
 {
   draw_region ();
-  ext_IRQ ();
+  ext_irq ();
   mstate = 1;
 }
 
@@ -96,15 +82,6 @@ void handle_evbl ()
   master_clk -= evblclk;
   frame++;
 
-  if (app_data.crc == 0xA7344D1F)
-    {				/* Atlantis */
-      for (i = 0; i < 140; i++)
-	{
-	  ColorVector[i] = (VDCwrite[0xA3] & 0x7f) | (p1 & 0x80);
-	  AudioVector[i] = VDCwrite[0xAA];
-	}
-    }
-  else
     for (i = 0; i < MAXLINES; i++)
       {
 	ColorVector[i] = (VDCwrite[0xA3] & 0x7f) | (p1 & 0x80);
@@ -227,14 +204,10 @@ void init_system ()
 	  o2em_clean_quit (EXIT_FAILURE);
 	}
     }
-  for (i = 0; i < KEY_MAX; i++)
-    key2[i] = 0;
+  for (i = 0; i < KEY_MAX; i++) key2[i] = 0;
   key2vcnt = 0;
 
-  if (app_data.euro)
-    setvideomode (1);
-  else
-    setvideomode (0);
+  setvideomode (1);
 
   clear_collision ();
 }
@@ -245,7 +218,7 @@ void init_roms ()
   romlatch = 0;
 }
 
-Byte read_t1 ()
+uint8_t read_t1 ()
 {
   /*17 */
   if ((h_clk > 16) || (master_clk > VBLCLK))
@@ -254,7 +227,7 @@ Byte read_t1 ()
     return 0;
 }
 
-void write_p1 (Byte d)
+void write_p1 (uint8_t d)
 {
   if ((d & 0x80) != (p1 & 0x80))
     {
@@ -279,7 +252,7 @@ void write_p1 (Byte d)
     }
 }
 
-Byte read_P2 ()
+uint8_t read_P2 ()
 {
   int i, si, so, km;
 
@@ -320,11 +293,11 @@ Byte read_P2 ()
   return p2;
 }
 
-Byte ext_read (ADDRESS adr)
+uint8_t ext_read (uint16_t adr)
 {
-  Byte d;
-  Byte si;
-  Byte m;
+  uint8_t d;
+  uint8_t si;
+  uint8_t m;
   int i;
 
   if (!(p1 & 0x08) && !(p1 & 0x40))
@@ -407,9 +380,9 @@ Byte ext_read (ADDRESS adr)
   return 0;
 }
 
-Byte in_bus ()
+uint8_t in_bus ()
 {
-  Byte si = 0, d = 0, mode = 0, jn = 0, sticknum = 0;
+  uint8_t si = 0, d = 0, mode = 0, jn = 0, sticknum = 0;
 
   if ((p1 & 0x08) && (p1 & 0x10))
     {
@@ -462,7 +435,7 @@ Byte in_bus ()
   return d;
 }
 
-void ext_write (Byte dat, ADDRESS adr)
+void ext_write (uint8_t dat, uint16_t adr)
 {
   int i;
   int l;
@@ -532,7 +505,7 @@ void ext_write (Byte dat, ADDRESS adr)
     }
 }
 
-int snapline (int pos, Byte reg, int t)
+int snapline (int pos, uint8_t reg, int t)
 {
   int i;
   if (pos < MAXLINES + MAXSNAP + MAXSNAP)
@@ -565,7 +538,7 @@ static void setvideomode (int t)
 
 #define check_return_of_fxxx(ret, fn) if (ret == 0) { printf("%s:%d ERROR %s\n", __func__, __LINE__, strerror(errno)); fclose(fn); return -1;}
 
-void read_a_char (ADDRESS * c, size_t s, FILE * fn)
+void read_a_char (uint16_t * c, size_t s, FILE * fn)
 {
   if (fn == NULL || c == NULL || s == 0)
     {

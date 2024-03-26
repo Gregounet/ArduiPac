@@ -12,15 +12,13 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "types.h"
-#include "vmachine.h"
-#include "o2em2.h"
-#include "keyboard.h"
-#include "cset.h"
-#include "timefunc.h"
-#include "cpu.h"
-#include "vdc.h"
-#include "o2em_sdl.h"
+#include "arduipac_vmachine.h"
+#include "arduipac.h"
+#include "arduipac_cset.h"
+#include "arduipac_timefunc.h"
+#include "arduipac_8048.h"
+#include "arduipac_8245.h"
+#include "arduipac_sdl.h"
 
 #define COL_SP0   0x01
 #define COL_SP1   0x02
@@ -48,11 +46,11 @@ PALETTE oldcol;
  *
  * */
 
-static Byte *vscreen = NULL;
+static uint8_t *vscreen = NULL;
 
 static int cached_lines[MAXLINES];
 
-Byte coltab[256];
+uint8_t coltab[256];
 
 long clip_low;
 long clip_high;
@@ -60,10 +58,10 @@ long clip_high;
 int wsize;
 
 static void create_cmap ();
-static void draw_char (Byte ypos, Byte xpos, Byte chr, Byte col);
-static void draw_quad (Byte ypos, Byte xpos, Byte cp0l, Byte cp0h, Byte cp1l, Byte cp1h, Byte cp2l, Byte cp2h, Byte cp3l, Byte cp3h);
+static void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col);
+static void draw_quad (uint8_t ypos, uint8_t xpos, uint8_t cp0l, uint8_t cp0h, uint8_t cp1l, uint8_t cp1h, uint8_t cp2l, uint8_t cp2h, uint8_t cp3l, uint8_t cp3h);
 static void draw_grid ();
-void mputvid (unsigned int ad, unsigned int len, Byte d, Byte c);
+void mputvid (unsigned int ad, unsigned int len, uint8_t d, uint8_t c);
 
 void draw_region ()
 {
@@ -91,13 +89,11 @@ void draw_region ()
 static void create_cmap ()
 {
   int i;
-  /* Initialise parts of the colors array */
   for (i = 0; i < 16; i++)
     {
-      /* Use the color values from the color table */
-      colors[i + 32].r = colors[i].r = (colortable[i] & 0xff0000) >> 18;
-      colors[i + 32].g = colors[i].g = (colortable[i] & 0x00ff00) >> 10;
-      colors[i + 32].b = colors[i].b = (colortable[i] & 0x0000ff) >> 2;
+      colors[i + 32].r = colors[i].r = (colortable[i] & 0xFF0000) >> 18;
+      colors[i + 32].g = colors[i].g = (colortable[i] & 0x00FF00) >> 10;
+      colors[i + 32].b = colors[i].b = (colortable[i] & 0x0000FF) >> 2;
     }
 
   for (i = 16; i < 32; i++)
@@ -194,7 +190,7 @@ void clearscr ()
 /* d is color, what a good variable name!!
  * c is COL_HGRID(0x20 or COL_CHAR(0x80) or 8
  * */
-void mputvid (unsigned int ad, unsigned int len, Byte d, Byte c)
+void mputvid (unsigned int ad, unsigned int len, uint8_t d, uint8_t c)
 {
   unsigned int i;
   if (len >= sizeof (coltab))
@@ -244,9 +240,9 @@ void mputvid (unsigned int ad, unsigned int len, Byte d, Byte c)
 static void draw_grid ()
 {
   unsigned int pnt, pn1;
-  Byte mask, d;
+  uint8_t mask, d;
   int j, i, x, w;
-  Byte color;
+  uint8_t color;
 
   if (VDCwrite[0xA0] & 0x40)
     {
@@ -378,24 +374,6 @@ void finish_display ()
   SDL_Surface *screen_resize;
   SDL_Rect dest_rect;
 
-  /* calculate FPS */
-  if (app_data.show_fps == 1)
-    {
-      if (fps_last <= 0)
-	fps_last = gettimeticks ();
-      index = (index + 1) % 200;
-      if (!index)
-	{
-	  t = gettimeticks ();
-	  curr = t - fps_last;
-	  fps_last = t;
-	}
-      if (curr)
-	{
-	  textprintf_ex (bmp, font, 20, 4, 7, 0, "FPS: %3d",
-			 (int) ((200.0 * TICKSPERSEC) / curr + 0.5));
-	}
-    }
   for (y = 0; y < bmp->h; y++)
     {
       cached_lines[y] = !memcmp (get_raw_pixel_line (bmpcache, y),
@@ -461,7 +439,7 @@ void clear_collision ()
 void draw_display ()
 {
   int i, j, x, sm, t;
-  Byte y, b, d1, cl, c;
+  uint8_t y, b, d1, cl, c;
 
   unsigned int pnt, pnt2;
   if (BMPW < 0 || vscreen == NULL)
@@ -583,10 +561,10 @@ void draw_display ()
  * chr = This register holds the lowest 8 bits of the charset pointer.
  * col bit 0 = This is bit 8 of the charset pointer, the highest bit.
  * */
-void draw_char (Byte ypos, Byte xpos, Byte chr, Byte col)
+void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col)
 {
   int j, c;
-  Byte cl, d1;
+  uint8_t cl, d1;
   int y, b, n;
   unsigned int pnt;
 
@@ -639,12 +617,12 @@ void draw_char (Byte ypos, Byte xpos, Byte chr, Byte col)
  * This code is quite slow and needs a rewrite by somebody with more experience
  * than I (sgust) have */
 
-void draw_quad (Byte ypos, Byte xpos, Byte cp0l, Byte cp0h, Byte cp1l, Byte cp1h, Byte cp2l, Byte cp2h, Byte cp3l, Byte cp3h)
+void draw_quad (uint8_t ypos, uint8_t xpos, uint8_t cp0l, uint8_t cp0h, uint8_t cp1l, uint8_t cp1h, uint8_t cp2l, uint8_t cp2h, uint8_t cp3l, uint8_t cp3h)
 {
   /* char set pointers */
   int chp[4];
   /* colors */
-  Byte col[4];
+  uint8_t col[4];
   /* pointer into screen bitmap */
   unsigned int pnt;
   /* offset into current line */
@@ -745,13 +723,13 @@ int init_display ()
       return O2EM_FAILURE;
     }
 #ifndef __O2EM_SDL__
-  vscreen = (Byte *) bmp->dat;
+  vscreen = (uint8_t *) bmp->dat;
 #else
-  vscreen = (Byte *) bmp->pixels;
+  vscreen = (uint8_t *) bmp->pixels;
 #endif
   clear (bmp);
   clear (bmpcache);
-  col = (Byte *) malloc (BMPW * BMPH);
+  col = (uint8_t *) malloc (BMPW * BMPH);
   if (col == NULL)
     {
       fprintf (stderr, "Could not allocate memory for collision buffer.\n");
