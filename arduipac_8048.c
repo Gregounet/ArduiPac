@@ -844,7 +844,7 @@ void exec_8048 ()
 	  acc = (temp & 0xFF);
 	  break;
 
-	case 0x80:		/* MOVX  A,@Ri */
+	case 0x80:		/* MOVX A,@Ri */
 	  acc = ext_read (internal_ram[reg_pnt]);
 	  clk += 2;
 	  break;
@@ -1421,7 +1421,7 @@ void exec_8048 ()
 
 
       master_clk += clk;
-      h_clk += clk;
+      horizontal_clock += clk;
       clk_counter += clk;
 
       if (int_clk > clk) int_clk -= clk;
@@ -1430,9 +1430,9 @@ void exec_8048 ()
       if (xirq_pend) ext_irq ();
       if (tirq_pend) timer_irq ();
 
-      if (h_clk > LINECNT - 1)
+      if (horizontal_clock > LINECNT - 1)
 	{
-	  h_clk -= LINECNT;
+	  dhorizontal_clock -= LINECNT;
 	  if (enahirq && (VDCwrite[0xA0] & 0x01)) ext_irq ();
 	  if (count_on && mstate == 0)
 	    {

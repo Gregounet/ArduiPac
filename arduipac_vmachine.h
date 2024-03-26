@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "arduipac_sdl.h"
+#include "arduipac_graphics.h"
 
 #define LINECNT 21
 #define MAXLINES 500
@@ -15,9 +15,9 @@ extern int evblclk;
 
 extern int master_clk;
 extern int int_clk;
-extern int h_clk;
+extern int horizontal_clock;
 extern uint8_t collision_table[256];
-extern int mstate;
+extern uint8_e mstate;
 
 extern uint8_t external_ram[];
 extern uint8_t external_rom[];
@@ -29,12 +29,12 @@ extern unsigned long clk_counter;
 
 extern int enahirq;
 extern int pendirq;
-extern long regionoff;
-extern int sproff;
+
+extern int sprite_offset;
 
 uint8_t read_P2 ();
-void ext_write (uint8_t dat, uint16_t adr);
-uint8_t ext_read (uint16_t adr);
+void ext_write (uint8_t dat, uint16_t addr);
+uint8_t ext_read (uint16_t addr);
 void handle_vbl ();
 void handle_evbl ();
 void handle_evbll ();
