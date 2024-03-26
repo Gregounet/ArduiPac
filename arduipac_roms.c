@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 
@@ -16,16 +14,13 @@ int load_cart (char *file, struct resource *app_data)
 
   if (app_data == NULL)
     {
-      fprintf (stderr, "%s app_data NULL\n", __func__);
       return O2EM_FAILURE;
     }
   fn = fopen (file, "rb");
   if (fn == NULL)
     {
-      fprintf (stderr, "Error loading %s\n", file);
       return O2EM_FAILURE;
     }
-  printf ("Loading: \"%s\"  Size: ", file);
 
 
 	  for (i = nb - 1; i >= 0; i--)
@@ -33,14 +28,11 @@ int load_cart (char *file, struct resource *app_data)
 	      nbread = fread (&rom_table[i][1024], 2048, 1, fn);
 	      if (nbread != 1)
 		{
-		  fprintf (stderr, "Error reading %s %s\n", file,
-			   strerror (errno));
 		  fclose (fn);
 		  return O2EM_FAILURE;
 		}
 	      memcpy (&rom_table[i][3072], &rom_table[i][2048], 1024);	/* simulate missing A10 */
 	    }
-	  printf ("%dK\n", nb * 2);
 	}
     }
   fclose (fn);
@@ -59,8 +51,6 @@ int load_cart (char *file, struct resource *app_data)
       && (rom_table[nb - 1][1024 + 15] == 'B'))
     {
       app_data->openb = 1;
-      printf ("  openb ROM\n");
     }
-  printf ("  %d bank(s)\n", app_data->bank);
   return O2EM_SUCCESS;
 }

@@ -10,13 +10,7 @@
 #define MAXSNAP 50
 
 #define VBLCLK 5493
-#define EVBLCLK_NTSC 5964
 #define EVBLCLK_PAL 7259
-
-#define FPS_NTSC 60
-#define FPS_PAL 50
-#define WANT_FPS_PAL 1
-#define WANT_FPS_NTSC 0
 
 extern uint8_t dbstick1, dbstick2;
 extern int last_line;
@@ -29,9 +23,8 @@ extern int h_clk;
 extern uint8_t coltab[256];
 extern int mstate;
 
-extern uint8_t intRAM[];
-extern uint8_t extRAM[];
-extern uint8_t extROM[];
+extern uint8_t external_ram[];
+extern uint8_t external_rom[];
 extern uint8_t VDCwrite[256];
 extern uint8_t ColorVector[MAXLINES];
 extern uint8_t *rom;
@@ -41,7 +34,6 @@ extern unsigned long clk_counter;
 
 extern int enahirq;
 extern int pendirq;
-extern int useforen;
 extern long regionoff;
 extern int sproff;
 extern int tweakedaudio;
@@ -57,7 +49,7 @@ uint8_t in_bus ();
 void write_p1 (uint8_t d);
 uint8_t read_t1 ();
 void init_system ();
-void init_roms ();
+// void init_roms ();
 void run ();
 
 extern struct resource

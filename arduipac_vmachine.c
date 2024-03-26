@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <stdio.h>
 #include <time.h>
 
 #include "arduipac_8048.h"
@@ -12,11 +11,11 @@
 static uint8_t x_latch, y_latch;
 static int romlatch = 0;
 static uint8_t line_count;
-static int fps = FPS_NTSC;
+static int fps;
 
 static uint8_t snapedlines[MAXLINES + 2 * MAXSNAP][256][2];
 
-int evblclk = EVBLCLK_NTSC;
+int evblclk;
 
 struct resource app_data;
 int frame = 0;
@@ -32,23 +31,17 @@ int mstate;
 
 int pendirq = 0;
 int enahirq = 1;
-int useforen = 0;
 long regionoff = 0xFFFF;
 int mxsnap = 2;
 int sproff = 0;			/* sprite offset */
 
-uint8_t rom_table[8][4096];
-
-uint8_t intRAM[64];
-uint8_t extRAM[256];
-uint8_t extROM[1024];
+uint8_t external_ram[256];
+uint8_t external_rom[1024];
 
 uint8_t VDCwrite[256];
 uint8_t ColorVector[MAXLINES];
 uint8_t AudioVector[MAXLINES];
 uint8_t *rom;
-
-static void setvideomode (int t);
 
 void run ()
 {
@@ -115,7 +108,6 @@ void handle_evbl ()
 	}
       if (antiloop >= 1000000)
 	{
-	  printf ("antiloop %d\n", antiloop);
 	}
       last = gettimeticks ();
     }
@@ -157,7 +149,6 @@ void handle_evbll ()
 	}
       if (antiloop >= 1000000)
 	{
-	  printf ("antiloop %d\n", antiloop);
 	}
       last = gettimeticks ();
     }
@@ -177,15 +168,13 @@ void init_system ()
   itimer = 0;
   clk_counter = 0;
 
-  init_roms ();
+  //init_roms ();
 
   for (i = 0; i < 256; i++)
     {
       VDCwrite[i] = 0;
-      extRAM[i] = 0;
+      external_ram[i] = 0;
     }
-  for (i = 0; i < 64; i++)
-    intRAM[i] = 0;
 
   for (i = 0; i < MAXLINES; i++)
     AudioVector[i] = ColorVector[i] = 0;
@@ -200,22 +189,13 @@ void init_system ()
       i = install_joystick (JOY_TYPE_AUTODETECT);
       if (i || (num_joysticks < 1))
 	{
-	  fprintf (stderr, "Error: no joystick detected\n");
 	  o2em_clean_quit (EXIT_FAILURE);
 	}
     }
   for (i = 0; i < KEY_MAX; i++) key2[i] = 0;
   key2vcnt = 0;
 
-  setvideomode (1);
-
   clear_collision ();
-}
-
-void init_roms ()
-{
-  rom = rom_table[0];
-  romlatch = 0;
 }
 
 uint8_t read_t1 ()
@@ -240,15 +220,15 @@ void write_p1 (uint8_t d)
   p1 = d;
   if (app_data.bank == 2)
     {
-      rom = rom_table[~p1 & 0x01];
+      //rom = rom_table[~p1 & 0x01];
     }
   else if (app_data.bank == 3)
     {
-      rom = rom_table[~p1 & 0x03];
+      //rom = rom_table[~p1 & 0x03];
     }
   else if (app_data.bank == 4)
     {
-      rom = rom_table[(p1 & 1) ? 0 : romlatch];
+      //rom = rom_table[(p1 & 1) ? 0 : romlatch];
     }
 }
 
@@ -293,7 +273,7 @@ uint8_t read_P2 ()
   return p2;
 }
 
-uint8_t ext_read (uint16_t adr)
+uint8_t ext_read (uint16_t addr)
 {
   uint8_t d;
   uint8_t si;
@@ -303,7 +283,7 @@ uint8_t ext_read (uint16_t adr)
   if (!(p1 & 0x08) && !(p1 & 0x40))
     {
       /* Handle VDC Read */
-      switch (adr)
+      switch (addr)
 	{
 	case 0xA1:
 	  d = VDCwrite[0xA0] & 0x02;
@@ -365,16 +345,16 @@ uint8_t ext_read (uint16_t adr)
 	      return y_latch;
 	    }
 	default:
-	  return VDCwrite[adr];
+	  return VDCwrite[addr];
 	}
     }
   else if (!(p1 & 0x10))
     {
-      return extRAM[adr & 0xFF];
+      return external_ram[addr & 0xFF];
     }
   else if (app_data.exrom && (p1 & 0x02))
     {
-      return extROM[(p2 << 8) | (adr & 0xFF)];
+      return external_rom[(p2 << 8) | (addr & 0xFF)];
     }
 
   return 0;
@@ -435,14 +415,14 @@ uint8_t in_bus ()
   return d;
 }
 
-void ext_write (uint8_t dat, uint16_t adr)
+void ext_write (uint8_t dat, uint16_t addr)
 {
   int i;
   int l;
 
   if (!(p1 & 0x08))
     {
-      if (adr == 0xA0)
+      if (addr == 0xA0)
 	{
 	  if ((VDCwrite[0xA0] & 0x02) && !(dat & 0x02))
 	    {
@@ -456,46 +436,46 @@ void ext_write (uint8_t dat, uint16_t adr)
 	      draw_region ();
 	    }
 	}
-      else if (adr == 0xA3)
+      else if (addr == 0xA3)
 	{
 	  l = snapline ((int) ((float) master_clk / 22.0 + 0.5), dat, 1);
 	  for (i = l; i < MAXLINES; i++)
 	    ColorVector[i] = (dat & 0x7f) | (p1 & 0x80);
 	}
-      else if (adr == 0xAA)
+      else if (addr == 0xAA)
 	{
 	  for (i = master_clk / 22; i < MAXLINES; i++)
 	    AudioVector[i] = dat;
 	}
-      else if ((adr >= 0x40) && (adr <= 0x7f) && ((adr & 2) == 0))
+      else if ((addr >= 0x40) && (addr <= 0x7f) && ((addr & 2) == 0))
 	{
 	  /* simulate quad: all 4 sub quad position registers
 	   * are mapped to the same internal register */
-	  adr = adr & 0x71;
+	  addr = addr & 0x71;
 	  /* Another minor thing: the y register always returns
 	   * bit 0 as 0 */
-	  if ((adr & 1) == 0)
+	  if ((addr & 1) == 0)
 	    dat = dat & 0xfe;
-	  VDCwrite[adr] = VDCwrite[adr + 4] = VDCwrite[adr + 8] =
-	    VDCwrite[adr + 12] = dat;
+	  VDCwrite[addr] = VDCwrite[addr + 4] = VDCwrite[addr + 8] =
+	    VDCwrite[addr + 12] = dat;
 	}
-      VDCwrite[adr] = dat;
+      VDCwrite[addr] = dat;
     }
   else if (!(p1 & 0x10) && !(p1 & 0x40))
     {
-      adr = adr & 0xFF;
+      addr = addr & 0xFF;
 
-      if (adr < 0x80)
+      if (addr < 0x80)
 	{
 	  /* Handle ext RAM Write */
-	  extRAM[adr] = dat;
+	  external_ram[addr] = dat;
 	}
       else
 	{
 	  if (app_data.bank == 4)
 	    {
 	      romlatch = (~dat) & 7;
-	      rom = rom_table[(p1 & 1) ? 0 : romlatch];
+	      // nrom = rom_table[(p1 & 1) ? 0 : romlatch];
 	    }
 	}
     }
@@ -522,32 +502,7 @@ int snapline (int pos, uint8_t reg, int t)
   return pos;
 }
 
-static void setvideomode (int t)
-{
-  if (t)
-    {
-      evblclk = EVBLCLK_PAL;
-      fps = FPS_PAL;
-    }
-  else
-    {
-      evblclk = EVBLCLK_NTSC;
-      fps = FPS_NTSC;
-    }
-}
-
-#define check_return_of_fxxx(ret, fn) if (ret == 0) { printf("%s:%d ERROR %s\n", __func__, __LINE__, strerror(errno)); fclose(fn); return -1;}
-
 void read_a_char (uint16_t * c, size_t s, FILE * fn)
 {
-  if (fn == NULL || c == NULL || s == 0)
-    {
-      fprintf (stderr, "%s Error invalid parameter\n", __func__);
-      return;
-    }
-  if (fread (c, s, 1, fn) < 1)
-    {
-      fprintf (stderr, "Error fread %s: %s\n", __func__, strerror (errno));
-      o2em_clean_quit (EXIT_FAILURE);
-    }
+  fread (c, s, 1, fn);
 }

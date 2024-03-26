@@ -9,15 +9,13 @@
  * */
 
 #include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
 
+#include "arduipac_8048.h"
+#include "arduipac_8245.h"
 #include "arduipac_vmachine.h"
 #include "arduipac.h"
 #include "arduipac_cset.h"
 #include "arduipac_timefunc.h"
-#include "arduipac_8048.h"
-#include "arduipac_8245.h"
 #include "arduipac_sdl.h"
 
 #define COL_SP0   0x01
@@ -32,8 +30,8 @@
 #define Y_START		24
 
 static long colortable[16] = {
-  0x000000, 0x0e3dd4, 0x00981b, 0x00bbd9, 0xc70008, 0xcc16b3, 0x9d8710, 0xe1dee1,
-  0x5f6e6b, 0x6aa1ff, 0x3df07a, 0x31ffff, 0xff4255, 0xff98ff, 0xd9ad5d, 0xffffff
+  0x000000, 0x0e3DD4, 0x00981B, 0x00BBD9, 0xc70008, 0xCC16B3, 0x9D8710, 0xE1DEE1,
+  0x5F6E6B, 0x6AA1FF, 0x3DF07A, 0x31FFFF, 0xFF4255, 0xFF98FF, 0xD9AD5D, 0xFFFFFF
 };
 
 PALETTE colors;
@@ -67,22 +65,16 @@ void draw_region ()
 {
   int i;
 
-  if (regionoff == 0xffff)
-    i = (master_clk / (LINECNT - 1) - 5);
-  else
-    i = (master_clk / 22 + regionoff);
+  if (regionoff == 0xffff) i = (master_clk / (LINECNT - 1) - 5);
+  else i = (master_clk / 22 + regionoff);
   i = (snapline (i, VDCwrite[0xA0], 0));
 
-  if (i < 0)
-    i = 0;
+  if (i < 0) i = 0;
   clip_low = last_line * (long) BMPW;
   clip_high = i * (long) BMPW;
-  if (clip_high > BMPW * BMPH)
-    clip_high = BMPW * BMPH;
-  if (clip_low < 0)
-    clip_low = 0;
-  if (clip_low < clip_high)
-    draw_display ();
+  if (clip_high > BMPW * BMPH) clip_high = BMPW * BMPH;
+  if (clip_low < 0) clip_low = 0;
+  if (clip_low < clip_high) draw_display ();
   last_line = i;
 }
 
@@ -104,8 +96,7 @@ static void create_cmap ()
       colors[i + 32].b = colors[i].b = colors[i - 16].b / 2;
     }
 
-  for (i = 64; i < 256; i++)
-    colors[i].r = colors[i].g = colors[i].b = 0;
+  for (i = 64; i < 256; i++) colors[i].r = colors[i].g = colors[i].b = 0;
   for (i = 0; i < 256; i++)
     {
       colors[i].r *= 4;
@@ -129,7 +120,6 @@ void grmode ()
 	      wsize = 1;
 	      if (set_gfx_mode (GFX_AUTODETECT_FULLSCREEN, 320, 240, 0, 0))
 		{
-		  fprintf (stderr, "Error: could not create screen.\n");
 		  o2em_clean_quit (EXIT_FAILURE);
 		}
 	    }
@@ -140,10 +130,8 @@ void grmode ()
 	  if (set_gfx_mode (GFX_AUTODETECT_FULLSCREEN, 640, 480, 0, 0))
 	    {
 	      wsize = 1;
-	      printf ("%s trying 320x240\n", __func__);
 	      if (set_gfx_mode (GFX_AUTODETECT_FULLSCREEN, 320, 240, 0, 0))
 		{
-		  fprintf (stderr, "Error: could not create screen.\n");
 		  o2em_clean_quit (EXIT_FAILURE);
 		}
 	    }
@@ -163,13 +151,11 @@ void grmode ()
 		  o2em_clean_quit (EXIT_FAILURE);
 		}
 	    }
-	  printf ("Could not set the requested window size\n");
 	}
     }
 
   if ((app_data.scanlines) && (wsize == 1))
     {
-      printf ("Could not set scanlines\n");
     }
 
   set_palette (colors);
@@ -195,12 +181,10 @@ void mputvid (unsigned int ad, unsigned int len, uint8_t d, uint8_t c)
   unsigned int i;
   if (len >= sizeof (coltab))
     {
-      printf ("%s ERROR %u > %lu\n", __func__, len, sizeof (coltab));
       return;
     }
   if (c >= sizeof (coltab))
     {
-      printf ("%s ERROR %u > %lu\n", __func__, c, sizeof (coltab));
       return;
     }
   if ((ad > (unsigned long) clip_low) && (ad < (unsigned long) clip_high))
@@ -349,17 +333,14 @@ static void draw_grid ()
     }
 }
 
-unsigned char *
-get_raw_pixel_line (BITMAP * pSurface, int y)
+unsigned char * get_raw_pixel_line (BITMAP * pSurface, int y)
 {
   if (pSurface == NULL)
     {
-      fprintf (stderr, "%s Error surface is NULL\n", __func__);
       return NULL;
     }
   if (y < 0)
     {
-      fprintf (stderr, "%s Error y < 0\n", __func__);
       return NULL;
     }
   return pSurface->line[y];
@@ -444,20 +425,15 @@ void draw_display ()
   unsigned int pnt, pnt2;
   if (BMPW < 0 || vscreen == NULL)
     {
-      fprintf (stderr, "%s error\n", __func__);
       return;
     }
 
   for (i = clip_low / BMPW; i < clip_high / BMPW; i++)
-    memset (vscreen + i * BMPW,
-	    ((ColorVector[i] & 0x38) >> 3) | (ColorVector[i] & 0x80 ? 0 : 8),
-	    BMPW);
+    memset (vscreen + i * BMPW, ((ColorVector[i] & 0x38) >> 3) | (ColorVector[i] & 0x80 ? 0 : 8), BMPW);
 
   if (VDCwrite[0xA0] & 0x08)	/* 0xA0 Bit 3 If this bit is 1 the grid is displayed. */
     draw_grid ();
 
-  if (useforen && (!(VDCwrite[0xA0] & 0x20)))	/* if bit 5 of 0xA0 is not set, dont display chars and quad */
-    return;
 
   /* 10h-7Fh: vdc_charX, vdc_quadX http://soeren.informationstheater.de/g7000/hardware.html
    * Every char (and sub-quad) has a set of 4 control registers.
@@ -682,44 +658,23 @@ void draw_quad (uint8_t ypos, uint8_t xpos, uint8_t cp0l, uint8_t cp0h, uint8_t 
     }
 }
 
-static void txtmsg (int x, int y, int c, const char *s)
-{
-  textout_centre_ex (bmp, font, s, x + 1, y + 1, 32, -1);
-  textout_centre_ex (bmp, font, s, x, y, c, -1);
-}
-
-void display_msg (char *msg, int waits)
-{
-  rectfill (bmp, 60, 72, 271, 90, 9 + 32);
-  line (bmp, 60, 72, 271, 72, 15 + 32);
-  line (bmp, 60, 72, 60, 90, 15 + 32);
-  line (bmp, 61, 90, 271, 90, 1 + 32);
-  line (bmp, 271, 90, 271, 72, 1 + 32);
-  txtmsg (166, 76, 15 + 32, msg);
-  finish_display ();
-  rest (waits * 100);
-}
-
 int init_display ()
 {
   get_palette (oldcol);
   create_cmap ();
   if (BMPW * BMPH == 0)
     {
-      fprintf (stderr, "BMPW * BMPH == 0\n");
       o2em_clean_quit (EXIT_FAILURE);
     }
   bmp = create_bitmap (BMPW, BMPH);
   if (bmp == NULL)
     {
-      fprintf (stderr, "Could not allocate memory for screen buffer.\n");
       return O2EM_FAILURE;
     }
   bmpcache = create_bitmap (BMPW, BMPH);
   if (bmpcache == NULL)
     {
       /*TODO deallocate bmp */
-      fprintf (stderr, "Could not allocate memory for screen buffer.\n");
       return O2EM_FAILURE;
     }
 #ifndef __O2EM_SDL__
@@ -732,7 +687,6 @@ int init_display ()
   col = (uint8_t *) malloc (BMPW * BMPH);
   if (col == NULL)
     {
-      fprintf (stderr, "Could not allocate memory for collision buffer.\n");
       o2em_clean_quit (EXIT_FAILURE);
     }
   memset (col, 0, BMPW * BMPH);

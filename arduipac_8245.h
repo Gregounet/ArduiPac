@@ -30,7 +30,6 @@ void finish_display ();
 void close_display ();
 void grmode ();
 void display_bg ();
-void display_msg (char *msg, int waits);
 void clear_collision ();
 void clearscr ();
 

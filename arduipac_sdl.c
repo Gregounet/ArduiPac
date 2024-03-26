@@ -1,5 +1,3 @@
-#include <string.h>
-
 #include "arduipac_sdl.h"
 #include "arduipac.h"
 
@@ -10,12 +8,6 @@ BITMAP * create_bitmap (int w, int h)
   SDL_Surface *temp;
   int rmask, gmask, bmask, ret;
 
-  if (w <= 0 || h <= 0)
-    {
-      fprintf (stderr, "%s invalid parameters %d,%d\n", __func__, w, h);
-      return NULL;
-    }
-  printf ("%s create with %dx%d:%d\n", __func__, w, h, DISPLAY_DEPTH);
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
   rmask = 0xff000000;
   gmask = 0x00ff0000;
@@ -31,12 +23,9 @@ BITMAP * create_bitmap (int w, int h)
 
   if (temp == NULL)
     {
-      fprintf (stderr, "%s %s %s %s\n", __FILE__, __func__, strerror (errno),
-	       SDL_GetError ());
       return NULL;
     }
   ret = SDL_SetPalette (temp, SDL_LOGPAL | SDL_PHYSPAL, colors, 0, 256);
-  printf ("%s TODO SDL_SetPalette=%d check return\n", __func__, ret);
   return temp;
 }
 
@@ -50,7 +39,6 @@ void set_color_depth (int depth)
   if (depth == 8 || depth == 16 || depth == 24 || depth == 32)
     DISPLAY_DEPTH = depth;
   else
-    fprintf (stderr, "%s Unknown DISPLAY_DEPTH %d\n", __func__, depth);
 }
 
 int set_gfx_mode (int card, int w, int h, int v_w, int v_h)
@@ -70,12 +58,10 @@ int set_gfx_mode (int card, int w, int h, int v_w, int v_h)
     }
   else
     {
-      fprintf (stderr, "Screen already init\n");
       return O2EM_FAILURE;
     }
   if (screen == NULL)
     {
-      fprintf (stderr, "Unable to create screen: %s", SDL_GetError ());
       return O2EM_FAILURE;
     }
   return O2EM_SUCCESS;
@@ -94,7 +80,6 @@ void stretch_blit (BITMAP * source, BITMAP * dest, int source_x, int source_y,
   SDL_Rect srcrect, dstrect;
   if (source == NULL || dest == NULL)
     {
-      fprintf (stderr, "%s ERROR arg is NULL\n", __func__);
       return;
     }
   srcrect.x = source_x;
@@ -108,7 +93,6 @@ void stretch_blit (BITMAP * source, BITMAP * dest, int source_x, int source_y,
   ret = SDL_BlitSurface (source, &srcrect, dest, &dstrect);
   if (ret != 0)
     {
-      fprintf (stderr, "%s error %s\n", __func__, SDL_GetError ());
     }
 }
 
@@ -130,7 +114,6 @@ int check_palette (SDL_Color * p)
     {
       if (p[i].r == 0 && p[i].g == 0 && p[i].b == 0)
 	{
-	  fprintf (stderr, "%s palette is empty\n", __func__);
 	  return 1;
 	}
     }
@@ -139,7 +122,6 @@ int check_palette (SDL_Color * p)
 
 void set_palette (SDL_Color * p)
 {
-  printf ("%s\n", __func__);
   check_palette (p);
   SDL_SetPalette (screen, SDL_LOGPAL | SDL_PHYSPAL, p, 0, 256);
 }
@@ -148,12 +130,10 @@ unsigned char * get_raw_pixel_line (SDL_Surface * pSurface, int y)
 {
   if (pSurface == NULL)
     {
-      fprintf (stderr, "%s Error surface is NULL\n", __func__);
       return NULL;
     }
   if (y < 0)
     {
-      fprintf (stderr, "%s Error y < 0\n", __func__);
       return NULL;
     }
   return (unsigned char *) pSurface->pixels + (pSurface->pitch * y);
@@ -163,12 +143,10 @@ unsigned char * get_raw_pixel (SDL_Surface * pSurface, int x, int y)
 {
   if (pSurface == NULL)
     {
-      fprintf (stderr, "%s Error surface is NULL\n", __func__);
       return NULL;
     }
   if (y < 0)
     {
-      fprintf (stderr, "%s Error y < 0\n", __func__);
       return NULL;
     }
   return (unsigned char *) pSurface->pixels + (pSurface->pitch * y) + x;

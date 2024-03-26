@@ -1,35 +1,76 @@
-#include <stdio.h>
+#include <stdint.h>
 
-#include "arduipac_vmachine.h"
-#include "arduipac_8245.h"
 #include "arduipac_8048.h"
+// #include "arduipac_8245.h"
+#include "arduipac_vmachine.h"
 
-#define push(d) {intRAM[sp++] = (d); if (sp > 23) sp = 8;}
-#define pull() (sp--, (sp < 8)?(sp=23):0, intRAM[sp])
+#define push(d) {internal_ram[sp++] = (d); if (sp > 23) sp = 8;}
+#define pull() (sp--, (sp < 8)?(sp=23):0, internal_ram[sp])
 #define make_psw() {psw = (cy << 7) | ac | f0 | bs | 0x08; psw = psw | ((sp - 8) >> 1);}
 #define illegal(i) {}
 #define undef(i) {}
 #define ROM(addr) (rom[(addr) & 0xFFF])
 
+uint8_t internal_ram[64];
+
+uint16_t pc;
+uint8_t sp;
+uint8_t psw;
+
+long clk;
+
+uint8_t ac;
+uint8_t cy;
+
+uint8_t reg_pnt;
+
+uint8_t itimer;
+uint8_t timer_on;
+uint8_t count_on;
+
+uint8_t t_flag;
+
+uint8_t p1;
+uint8_t p2;
+
+uint8_t xirq_pend;
+uint8_t tirq_pend;
+
+uint8_t bs;
+
+uint8_t f0;
+uint8_t f1;
+
+uint8_t xirq_en;
+uint8_t tirq_en;
+uint8_t irq_ex;	
+
+int master_count;
+
 void init_8048 ()
 {
   pc = 0x00;
   sp = 0x08;
-  bs = 0;
+
   p1 = 0xFF;
   p2 = 0xFF;
+  reg_pnt = 0x00;
+
+  bs = 0;
   ac = 0;
   cy = 0;
   f0 = 0;
   f1 = 0;
+
   timer_on = 0;
   count_on = 0;
-  reg_pnt = 0x00;
-  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
-  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
-  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
-  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
-  tirq_en = xirq_en = irq_ex = xirq_pend = tirq_pend = 0;
+
+  tirq_en = 0;
+  tirq_pend = 0;
+
+  xirq_en = 0;
+  irq_ex =  0;
+  xirq_pend  = 0;
 }
 
 void ext_irq ()
@@ -45,8 +86,7 @@ void ext_irq ()
       push (((pc & 0xF00) >> 8) | (psw & 0xF0));
       pc = 0x03;
     }
-  if (pendirq && (!xirq_en))
-    xirq_pend = 1;
+  if (pendirq && (!xirq_en)) xirq_pend = 1;
 }
 
 void timer_irq ()
@@ -66,16 +106,17 @@ void timer_irq ()
 
 void exec_8048 ()
 {
+  uint8_t acc;
+
   uint8_t op;
-  uint16_t adr;
-  uint8_t dat;
-  int temp;
+  uint16_t addr;
+  uint8_t data;
+  uint16_t temp;
 
   for (;;)
     {
       clk = 0;
 
-      lastpc = pc;
       op = ROM (pc++);
 
       switch (op)
@@ -119,12 +160,11 @@ void exec_8048 ()
 	case 0x03:		/* ADD A,#data */
 	  clk += 2;
 	  cy = ac = 0;
-	  dat = ROM (pc++);
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
+	  data = ROM (pc++);
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f)
 	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x04:		/* JMP */
@@ -153,57 +193,53 @@ void exec_8048 ()
 	  break;
 	case 0x0C:		/* MOVD A,P4 */
 	  clk += 2;
-	  acc = read_PB (0);
+	  // acc = read_PB (0);
 	  break;
 	case 0x0D:		/* MOVD A,P5 */
 	  clk += 2;
-	  acc = read_PB (1);
+	  // acc = read_PB (1);
 	  break;
 	case 0x0E:		/* MOVD A,P6 */
 	  clk += 2;
-	  acc = read_PB (2);
+	  // acc = read_PB (2);
 	  break;
 	case 0x0F:		/* MOVD A,P7 */
 	  clk += 2;
-	  acc = read_PB (3);
+	  // acc = read_PB (3);
 	  break;
 	case 0x10:		/* INC @Ri */
-	  intRAM[intRAM[reg_pnt] & 0x3F]++;
+	  internal_ram[internal_ram[reg_pnt] & 0x3F]++;
 	  clk++;
 	  break;
 	case 0x11:		/* INC @Ri */
-	  intRAM[intRAM[reg_pnt + 1] & 0x3F]++;
+	  internal_ram[internal_ram[reg_pnt + 1] & 0x3F]++;
 	  clk++;
 	  break;
 	case 0x12:		/* JBb address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc & 0x01)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc & 0x01) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x13:		/* ADDC A,#data */
 	  clk += 2;
-	  dat = ROM (pc++);
+	  data = ROM (pc++);
 	  ac = 0;
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 
 	case 0x14:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc);
+	  addr = ROM (pc);
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = adr;
+	  pc = addr;
 	  break;
 	case 0x15:		/* DIS I */
 	  xirq_en = 0;
@@ -211,11 +247,9 @@ void exec_8048 ()
 	  break;
 	case 0x16:		/* JTF */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (t_flag)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (t_flag) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  t_flag = 0;
 	  break;
 	case 0x17:		/* INC A */
@@ -223,48 +257,48 @@ void exec_8048 ()
 	  clk++;
 	  break;
 	case 0x18:		/* INC Rr */
-	  intRAM[reg_pnt]++;
+	  internal_ram[reg_pnt]++;
 	  clk++;
 	  break;
 	case 0x19:		/* INC Rr */
-	  intRAM[reg_pnt + 1]++;
+	  internal_ram[reg_pnt + 1]++;
 	  clk++;
 	  break;
 	case 0x1A:		/* INC Rr */
-	  intRAM[reg_pnt + 2]++;
+	  internal_ram[reg_pnt + 2]++;
 	  clk++;
 	  break;
 	case 0x1B:		/* INC Rr */
-	  intRAM[reg_pnt + 3]++;
+	  internal_ram[reg_pnt + 3]++;
 	  clk++;
 	  break;
 	case 0x1C:		/* INC Rr */
-	  intRAM[reg_pnt + 4]++;
+	  internal_ram[reg_pnt + 4]++;
 	  clk++;
 	  break;
 	case 0x1D:		/* INC Rr */
-	  intRAM[reg_pnt + 5]++;
+	  internal_ram[reg_pnt + 5]++;
 	  clk++;
 	  break;
 	case 0x1E:		/* INC Rr */
-	  intRAM[reg_pnt + 6]++;
+	  internal_ram[reg_pnt + 6]++;
 	  clk++;
 	  break;
 	case 0x1F:		/* INC Rr */
-	  intRAM[reg_pnt + 7]++;
+	  internal_ram[reg_pnt + 7]++;
 	  clk++;
 	  break;
 	case 0x20:		/* XCH A,@Ri */
 	  clk++;
-	  dat = acc;
-	  acc = intRAM[intRAM[reg_pnt] & 0x3F];
-	  intRAM[intRAM[reg_pnt] & 0x3F] = dat;
+	  data = acc;
+	  acc = internal_ram[internal_ram[reg_pnt] & 0x3F];
+	  internal_ram[internal_ram[reg_pnt] & 0x3F] = data;
 	  break;
 	case 0x21:		/* XCH A,@Ri */
 	  clk++;
-	  dat = acc;
-	  acc = intRAM[intRAM[reg_pnt + 1] & 0x3F];
-	  intRAM[intRAM[reg_pnt + 1] & 0x3F] = dat;
+	  data = acc;
+	  acc = internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
+	  internal_ram[internal_ram[reg_pnt + 1] & 0x3F] = data;
 	  break;
 	case 0x23:		/* MOV a,#data */
 	  clk += 2;
@@ -281,98 +315,94 @@ void exec_8048 ()
 	  break;
 	case 0x26:		/* JNT0 */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (!get_voice_status ())
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (!get_voice_status ()) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x27:		/* CLR A */
 	  clk++;
 	  acc = 0;
 	  break;
 	case 0x28:		/* XCH A,Rr */
-	  dat = acc;
-	  acc = intRAM[reg_pnt];
-	  intRAM[reg_pnt] = dat;
+	  data = acc;
+	  acc = internal_ram[reg_pnt];
+	  internal_ram[reg_pnt] = data;
 	  clk++;
 	  break;
 	case 0x29:		/* XCH A,Rr */
-	  dat = acc;
-	  acc = intRAM[reg_pnt + 1];
-	  intRAM[reg_pnt + 1] = dat;
+	  data = acc;
+	  acc = internal_ram[reg_pnt + 1];
+	  internal_ram[reg_pnt + 1] = data;
 	  clk++;
 	  break;
 	case 0x2A:		/* XCH A,Rr */
-	  dat = acc;
-	  acc = intRAM[reg_pnt + 2];
-	  intRAM[reg_pnt + 2] = dat;
+	  data = acc;
+	  acc = internal_ram[reg_pnt + 2];
+	  internal_ram[reg_pnt + 2] = data;
 	  clk++;
 	  break;
 	case 0x2B:		/* XCH A,Rr */
-	  dat = acc;
-	  acc = intRAM[reg_pnt + 3];
-	  intRAM[reg_pnt + 3] = dat;
+	  data = acc;
+	  acc = internal_ram[reg_pnt + 3];
+	  internal_ram[reg_pnt + 3] = data;
 	  clk++;
 	  break;
 	case 0x2C:		/* XCH A,Rr */
-	  dat = acc;
-	  acc = intRAM[reg_pnt + 4];
-	  intRAM[reg_pnt + 4] = dat;
+	  data = acc;
+	  acc = internal_ram[reg_pnt + 4];
+	  internal_ram[reg_pnt + 4] = data;
 	  clk++;
 	  break;
 	case 0x2D:		/* XCH A,Rr */
-	  dat = acc;
-	  acc = intRAM[reg_pnt + 5];
-	  intRAM[reg_pnt + 5] = dat;
+	  data = acc;
+	  acc = internal_ram[reg_pnt + 5];
+	  internal_ram[reg_pnt + 5] = data;
 	  clk++;
 	  break;
 	case 0x2E:		/* XCH A,Rr */
-	  dat = acc;
-	  acc = intRAM[reg_pnt + 6];
-	  intRAM[reg_pnt + 6] = dat;
+	  data = acc;
+	  acc = internal_ram[reg_pnt + 6];
+	  internal_ram[reg_pnt + 6] = data;
 	  clk++;
 	  break;
 	case 0x2F:		/* XCH A,Rr */
-	  dat = acc;
-	  acc = intRAM[reg_pnt + 7];
-	  intRAM[reg_pnt + 7] = dat;
+	  data = acc;
+	  acc = internal_ram[reg_pnt + 7];
+	  internal_ram[reg_pnt + 7] = data;
 	  clk++;
 	  break;
 	case 0x30:		/* XCHD A,@Ri */
 	  clk++;
-	  adr = intRAM[reg_pnt] & 0x3F;
-	  dat = acc & 0x0F;
+	  addr = internal_ram[reg_pnt] & 0x3F;
+	  data = acc & 0x0F;
 	  acc = acc & 0xF0;
-	  acc = acc | (intRAM[adr] & 0x0F);
-	  intRAM[adr] &= 0xF0;
-	  intRAM[adr] |= dat;
+	  acc = acc | (internal_ram[addr] & 0x0F);
+	  internal_ram[addr] &= 0xF0;
+	  internal_ram[addr] |= data;
 	  break;
 	case 0x31:		/* XCHD A,@Ri */
 	  clk++;
-	  adr = intRAM[reg_pnt + 1] & 0x3F;
-	  dat = acc & 0x0F;
+	  addr = internal_ram[reg_pnt + 1] & 0x3F;
+	  data = acc & 0x0F;
 	  acc = acc & 0xF0;
-	  acc = acc | (intRAM[adr] & 0x0F);
-	  intRAM[adr] &= 0xF0;
-	  intRAM[adr] |= dat;
+	  acc = acc | (internal_ram[addr] & 0x0F);
+	  internal_ram[addr] &= 0xF0;
+	  internal_ram[addr] |= data;
 	  break;
 	case 0x32:		/* JBb address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc & 0x02)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc & 0x02) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x34:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x100;
+	  addr = ROM (pc) | 0x100;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = adr;
+	  pc = addr;
 	  break;
 	case 0x35:		/* DIS TCNTI */
 	  tirq_en = 0;
@@ -381,11 +411,9 @@ void exec_8048 ()
 	  break;
 	case 0x36:		/* JT0 */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (get_voice_status ())
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (get_voice_status ()) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x37:		/* CPL A */
 	  acc = acc ^ 0xFF;
@@ -401,27 +429,27 @@ void exec_8048 ()
 	  break;
 	case 0x3C:		/* MOVD P4,A */
 	  clk += 2;
-	  write_PB (0, acc);
+	  // write_PB (0, acc);
 	  break;
 	case 0x3D:		/* MOVD P5,A */
 	  clk += 2;
-	  write_PB (1, acc);
+	  // write_PB (1, acc);
 	  break;
 	case 0x3E:		/* MOVD P6,A */
 	  clk += 2;
-	  write_PB (2, acc);
+	  // write_PB (2, acc);
 	  break;
 	case 0x3F:		/* MOVD P7,A */
 	  clk += 2;
-	  write_PB (3, acc);
+	  // write_PB (3, acc);
 	  break;
 	case 0x40:		/* ORL A,@Ri */
 	  clk++;
-	  acc = acc | intRAM[intRAM[reg_pnt] & 0x3F];
+	  acc = acc | internal_ram[internal_ram[reg_pnt] & 0x3F];
 	  break;
 	case 0x41:		/* ORL A,@Ri */
 	  clk++;
-	  acc = acc | intRAM[intRAM[reg_pnt + 1] & 0x3F];
+	  acc = acc | internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
 	  break;
 	case 0x42:		/* MOV A,T */
 	  clk++;
@@ -436,72 +464,67 @@ void exec_8048 ()
 	  clk += 2;
 	  break;
 	case 0x45:		/* STRT CNT */
-	  /* printf("START: %d=%d\n",master_clk/22,itimer); */
 	  count_on = 1;
 	  clk++;
 	  break;
 	case 0x46:		/* JNT1 */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (!read_t1 ())
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (!read_t1 ()) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x47:		/* SWAP A */
 	  clk++;
-	  dat = (acc & 0xF0) >> 4;
+	  data = (acc & 0xF0) >> 4;
 	  acc = acc << 4;
-	  acc = acc | dat;
+	  acc = acc | data;
 	  break;
 	case 0x48:		/* ORL A,Rr */
 	  clk++;
-	  acc = acc | intRAM[reg_pnt];
+	  acc = acc | internal_ram[reg_pnt];
 	  break;
 	case 0x49:		/* ORL A,Rr */
 	  clk++;
-	  acc = acc | intRAM[reg_pnt + 1];
+	  acc = acc | internal_ram[reg_pnt + 1];
 	  break;
 	case 0x4A:		/* ORL A,Rr */
 	  clk++;
-	  acc = acc | intRAM[reg_pnt + 2];
+	  acc = acc | internal_ram[reg_pnt + 2];
 	  break;
 	case 0x4B:		/* ORL A,Rr */
 	  clk++;
-	  acc = acc | intRAM[reg_pnt + 3];
+	  acc = acc | internal_ram[reg_pnt + 3];
 	  break;
 	case 0x4C:		/* ORL A,Rr */
 	  clk++;
-	  acc = acc | intRAM[reg_pnt + 4];
+	  acc = acc | internal_ram[reg_pnt + 4];
 	  break;
 	case 0x4D:		/* ORL A,Rr */
 	  clk++;
-	  acc = acc | intRAM[reg_pnt + 5];
+	  acc = acc | internal_ram[reg_pnt + 5];
 	  break;
 	case 0x4E:		/* ORL A,Rr */
 	  clk++;
-	  acc = acc | intRAM[reg_pnt + 6];
+	  acc = acc | internal_ram[reg_pnt + 6];
 	  break;
 	case 0x4F:		/* ORL A,Rr */
 	  clk++;
-	  acc = acc | intRAM[reg_pnt + 7];
+	  acc = acc | internal_ram[reg_pnt + 7];
 	  break;
 
 	case 0x50:		/* ANL A,@Ri */
-	  acc = acc & intRAM[intRAM[reg_pnt] & 0x3F];
+	  acc = acc & internal_ram[internal_ram[reg_pnt] & 0x3F];
 	  clk++;
 	  break;
 	case 0x51:		/* ANL A,@Ri */
-	  acc = acc & intRAM[intRAM[reg_pnt + 1] & 0x3F];
+	  acc = acc & internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
 	  clk++;
 	  break;
 	case 0x52:		/* JBb address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc & 0x04)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc & 0x04) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x53:		/* ANL A,#data */
 	  clk += 2;
@@ -509,12 +532,12 @@ void exec_8048 ()
 	  break;
 	case 0x54:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x200;
+	  addr = ROM (pc) | 0x200;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = adr;
+	  pc = addr;
 	  break;
 	case 0x55:		/* STRT T */
 	  timer_on = 1;
@@ -522,81 +545,74 @@ void exec_8048 ()
 	  break;
 	case 0x56:		/* JT1 */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (read_t1 ())
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (read_t1 ()) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x57:		/* DA A */
 	  clk++;
 	  if (((acc & 0x0F) > 0x09) || ac)
 	    {
-	      if (acc > 0xf9)
-		cy = 1;
+	      if (acc > 0xf9) cy = 1;
 	      acc += 6;
 	    }
-	  dat = (acc & 0xF0) >> 4;
-	  if ((dat > 9) || cy)
+	  data = (acc & 0xF0) >> 4;
+	  if ((data > 9) || cy)
 	    {
-	      dat += 6;
+	      data += 6;
 	      cy = 1;
 	    }
-	  acc = (acc & 0x0F) | (dat << 4);
+	  acc = (acc & 0x0F) | (data << 4);
 	  break;
 	case 0x58:		/* ANL A,Rr */
 	  clk++;
-	  acc = acc & intRAM[reg_pnt];
+	  acc = acc & internal_ram[reg_pnt];
 	  break;
 	case 0x59:		/* ANL A,Rr */
 	  clk++;
-	  acc = acc & intRAM[reg_pnt + 1];
+	  acc = acc & internal_ram[reg_pnt + 1];
 	  break;
 	case 0x5A:		/* ANL A,Rr */
 	  clk++;
-	  acc = acc & intRAM[reg_pnt + 2];
+	  acc = acc & internal_ram[reg_pnt + 2];
 	  break;
 	case 0x5B:		/* ANL A,Rr */
 	  clk++;
-	  acc = acc & intRAM[reg_pnt + 3];
+	  acc = acc & internal_ram[reg_pnt + 3];
 	  break;
 	case 0x5C:		/* ANL A,Rr */
 	  clk++;
-	  acc = acc & intRAM[reg_pnt + 4];
+	  acc = acc & internal_ram[reg_pnt + 4];
 	  break;
 	case 0x5D:		/* ANL A,Rr */
 	  clk++;
-	  acc = acc & intRAM[reg_pnt + 5];
+	  acc = acc & internal_ram[reg_pnt + 5];
 	  break;
 	case 0x5E:		/* ANL A,Rr */
 	  clk++;
-	  acc = acc & intRAM[reg_pnt + 6];
+	  acc = acc & internal_ram[reg_pnt + 6];
 	  break;
 	case 0x5F:		/* ANL A,Rr */
 	  clk++;
-	  acc = acc & intRAM[reg_pnt + 7];
+	  acc = acc & internal_ram[reg_pnt + 7];
 	  break;
 
 	case 0x60:		/* ADD A,@Ri */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[intRAM[reg_pnt] & 0x3F];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[internal_ram[reg_pnt] & 0x3F];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x61:		/* ADD A,@Ri */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[intRAM[reg_pnt + 1] & 0x3F];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x62:		/* MOV T,A */
@@ -609,148 +625,123 @@ void exec_8048 ()
 	  break;
 	case 0x65:		/* STOP TCNT */
 	  clk++;
-	  /* printf("STOP %d\n",master_clk/22); */
 	  count_on = timer_on = 0;
 	  break;
 	case 0x67:		/* RRC A */
-	  dat = cy;
+	  data = cy;
 	  cy = acc & 0x01;
 	  acc = acc >> 1;
-	  if (dat)
-	    acc = acc | 0x80;
-	  else
-	    acc = acc & 0x7F;
+	  if (data) acc = acc | 0x80;
+	  else acc = acc & 0x7F;
 	  clk++;
 	  break;
 	case 0x68:		/* ADD A,Rr */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[reg_pnt];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[reg_pnt];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x69:		/* ADD A,Rr */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[reg_pnt + 1];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[reg_pnt + 1];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x6A:		/* ADD A,Rr */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[reg_pnt + 2];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[reg_pnt + 2];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x6B:		/* ADD A,Rr */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[reg_pnt + 3];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[reg_pnt + 3];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x6C:		/* ADD A,Rr */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[reg_pnt + 4];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[reg_pnt + 4];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x6D:		/* ADD A,Rr */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[reg_pnt + 5];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[reg_pnt + 5];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x6E:		/* ADD A,Rr */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[reg_pnt + 6];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[reg_pnt + 6];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x6F:		/* ADD A,Rr */
 	  clk++;
 	  cy = ac = 0;
-	  dat = intRAM[reg_pnt + 7];
-	  if (((acc & 0x0f) + (dat & 0x0f)) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  data = internal_ram[reg_pnt + 7];
+	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  temp = acc + data;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x70:		/* ADDC A,@Ri */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[intRAM[reg_pnt] & 0x3F];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[internal_ram[reg_pnt] & 0x3F];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x71:		/* ADDC A,@Ri */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[intRAM[reg_pnt + 1] & 0x3F];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 
 	case 0x72:		/* JBb address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc & 0x08)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc & 0x08) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x74:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x300;
+	  addr = ROM (pc) | 0x300;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = adr;
+	  pc = addr;
 	  break;
 	case 0x75:		/* EN CLK */
 	  clk++;
@@ -758,125 +749,105 @@ void exec_8048 ()
 	  break;
 	case 0x76:		/* JF1 address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (f1)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (f1) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x77:		/* RR A */
 	  clk++;
-	  dat = acc & 0x01;
+	  data = acc & 0x01;
 	  acc = acc >> 1;
-	  if (dat)
-	    acc = acc | 0x80;
-	  else
-	    acc = acc & 0x7f;
+	  if (data) acc = acc | 0x80;
+	  else acc = acc & 0x7f;
 	  break;
 
 	case 0x78:		/* ADDC A,Rr */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[reg_pnt];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[reg_pnt];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x79:		/* ADDC A,Rr */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[reg_pnt + 1];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[reg_pnt + 1];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x7A:		/* ADDC A,Rr */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[reg_pnt + 2];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[reg_pnt + 2];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x7B:		/* ADDC A,Rr */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[reg_pnt + 3];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[reg_pnt + 3];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x7C:		/* ADDC A,Rr */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[reg_pnt + 4];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[reg_pnt + 4];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x7D:		/* ADDC A,Rr */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[reg_pnt + 5];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[reg_pnt + 5];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x7E:		/* ADDC A,Rr */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[reg_pnt + 6];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[reg_pnt + 6];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x7F:		/* ADDC A,Rr */
 	  clk++;
 	  ac = 0;
-	  dat = intRAM[reg_pnt + 7];
-	  if (((acc & 0x0f) + (dat & 0x0f) + cy) > 0x0f)
-	    ac = 0x40;
-	  temp = acc + dat + cy;
+	  data = internal_ram[reg_pnt + 7];
+	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  temp = acc + data + cy;
 	  cy = 0;
-	  if (temp > 0xFF)
-	    cy = 1;
+	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
 	  break;
 
 	case 0x80:		/* MOVX  A,@Ri */
-	  acc = ext_read (intRAM[reg_pnt]);
+	  acc = ext_read (internal_ram[reg_pnt]);
 	  clk += 2;
 	  break;
 	case 0x81:		/* MOVX A,@Ri */
-	  acc = ext_read (intRAM[reg_pnt + 1]);
+	  acc = ext_read (internal_ram[reg_pnt + 1]);
 	  clk += 2;
 	  break;
 	case 0x83:		/* RET */
@@ -894,11 +865,9 @@ void exec_8048 ()
 	  break;
 	case 0x86:		/* JNI address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (int_clk > 0)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (int_clk > 0) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x88:		/* BUS,#data */
 	  clk += 2;
@@ -913,61 +882,56 @@ void exec_8048 ()
 	  clk += 2;
 	  break;
 	case 0x8C:		/* ORLD P4,A */
-	  write_PB (0, read_PB (0) | acc);
+	  // write_PB (0, read_PB (0) | acc);
 	  clk += 2;
 	  break;
 	case 0x8D:		/* ORLD P5,A */
-	  write_PB (1, read_PB (1) | acc);
+	  // write_PB (1, read_PB (1) | acc);
 	  clk += 2;
 	  break;
 	case 0x8E:		/* ORLD P6,A */
-	  write_PB (2, read_PB (2) | acc);
+	  // write_PB (2, read_PB (2) | acc);
 	  clk += 2;
 	  break;
 	case 0x8F:		/* ORLD P7,A */
-	  write_PB (3, read_PB (3) | acc);
+	  // write_PB (3, read_PB (3) | acc);
 	  clk += 2;
 	  break;
 	case 0x90:		/* MOVX @Ri,A */
-	  ext_write (acc, intRAM[reg_pnt]);
+	  ext_write (acc, internal_ram[reg_pnt]);
 	  clk += 2;
 	  break;
 	case 0x91:		/* MOVX @Ri,A */
-	  ext_write (acc, intRAM[reg_pnt + 1]);
+	  ext_write (acc, internal_ram[reg_pnt + 1]);
 	  clk += 2;
 	  break;
 	case 0x92:		/* JBb address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc & 0x10)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc & 0x10) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x93:		/* RETR */
-	  /* printf("RETR %d\n",master_clk/22); */
 	  clk += 2;
-	  dat = pull ();
-	  pc = (dat & 0x0F) << 8;
-	  cy = (dat & 0x80) >> 7;
-	  ac = dat & 0x40;
-	  f0 = dat & 0x20;
-	  bs = dat & 0x10;
-	  if (bs)
-	    reg_pnt = 24;
-	  else
-	    reg_pnt = 0;
+	  data = pull ();
+	  pc = (data & 0x0F) << 8;
+	  cy = (data & 0x80) >> 7;
+	  ac = data & 0x40;
+	  f0 = data & 0x20;
+	  bs = data & 0x10;
+	  if (bs) reg_pnt = 0x18;
+	  else reg_pnt = 0x00;
 	  pc = pc | pull ();
 	  irq_ex = 0;
 	  break;
 	case 0x94:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x400;
+	  addr = ROM (pc) | 0x400;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = adr;
+	  pc = addr;
 	  break;
 	case 0x95:		/* CPL F0 */
 	  f0 = f0 ^ 0x20;
@@ -975,11 +939,9 @@ void exec_8048 ()
 	  break;
 	case 0x96:		/* JNZ address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc != 0)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc != 0) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0x97:		/* CLR C */
 	  cy = 0;
@@ -998,27 +960,27 @@ void exec_8048 ()
 	  clk += 2;
 	  break;
 	case 0x9C:		/* ANLD P4,A */
-	  write_PB (0, read_PB (0) & acc);
+	  // write_PB (0, read_PB (0) & acc);
 	  clk += 2;
 	  break;
 	case 0x9D:		/* ANLD P5,A */
-	  write_PB (1, read_PB (1) & acc);
+	  // write_PB (1, read_PB (1) & acc);
 	  clk += 2;
 	  break;
 	case 0x9E:		/* ANLD P6,A */
-	  write_PB (2, read_PB (2) & acc);
+	  // write_PB (2, read_PB (2) & acc);
 	  clk += 2;
 	  break;
 	case 0x9F:		/* ANLD P7,A */
-	  write_PB (3, read_PB (3) & acc);
+	  // write_PB (3, read_PB (3) & acc);
 	  clk += 2;
 	  break;
 	case 0xA0:		/* MOV @Ri,A */
-	  intRAM[intRAM[reg_pnt] & 0x3F] = acc;
+	  internal_ram[internal_ram[reg_pnt] & 0x3F] = acc;
 	  clk++;
 	  break;
 	case 0xA1:		/* MOV @Ri,A */
-	  intRAM[intRAM[reg_pnt + 1] & 0x3F] = acc;
+	  internal_ram[internal_ram[reg_pnt + 1] & 0x3F] = acc;
 	  clk++;
 	  break;
 	case 0xA3:		/* MOVP A,@A */
@@ -1038,66 +1000,64 @@ void exec_8048 ()
 	  clk++;
 	  break;
 	case 0xA8:		/* MOV Rr,A */
-	  intRAM[reg_pnt] = acc;
+	  internal_ram[reg_pnt] = acc;
 	  clk++;
 	  break;
 	case 0xA9:		/* MOV Rr,A */
-	  intRAM[reg_pnt + 1] = acc;
+	  internal_ram[reg_pnt + 1] = acc;
 	  clk++;
 	  break;
 	case 0xAA:		/* MOV Rr,A */
-	  intRAM[reg_pnt + 2] = acc;
+	  internal_ram[reg_pnt + 2] = acc;
 	  clk++;
 	  break;
 	case 0xAB:		/* MOV Rr,A */
-	  intRAM[reg_pnt + 3] = acc;
+	  internal_ram[reg_pnt + 3] = acc;
 	  clk++;
 	  break;
 	case 0xAC:		/* MOV Rr,A */
-	  intRAM[reg_pnt + 4] = acc;
+	  internal_ram[reg_pnt + 4] = acc;
 	  clk++;
 	  break;
 	case 0xAD:		/* MOV Rr,A */
-	  intRAM[reg_pnt + 5] = acc;
+	  internal_ram[reg_pnt + 5] = acc;
 	  clk++;
 	  break;
 	case 0xAE:		/* MOV Rr,A */
-	  intRAM[reg_pnt + 6] = acc;
+	  internal_ram[reg_pnt + 6] = acc;
 	  clk++;
 	  break;
 	case 0xAF:		/* MOV Rr,A */
-	  intRAM[reg_pnt + 7] = acc;
+	  internal_ram[reg_pnt + 7] = acc;
 	  clk++;
 	  break;
 	case 0xB0:		/* MOV @Ri,#data */
-	  intRAM[intRAM[reg_pnt] & 0x3F] = ROM (pc++);
+	  internal_ram[internal_ram[reg_pnt] & 0x3F] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xB1:		/* MOV @Ri,#data */
-	  intRAM[intRAM[reg_pnt + 1] & 0x3F] = ROM (pc++);
+	  internal_ram[internal_ram[reg_pnt + 1] & 0x3F] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xB2:		/* JBb address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc & 0x20)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc & 0x20) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0xB3:		/* JMPP @A */
-	  adr = (pc & 0xF00) | acc;
-	  pc = (pc & 0xF00) | ROM (adr);
+	  addr = (pc & 0xF00) | acc;
+	  pc = (pc & 0xF00) | ROM (addr);
 	  clk += 2;
 	  break;
 	case 0xB4:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x500;
+	  addr = ROM (pc) | 0x500;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = adr;
+	  pc = addr;
 	  break;
 	case 0xB5:		/* CPL F1 */
 	  f1 = f1 ^ 0x01;
@@ -1105,42 +1065,40 @@ void exec_8048 ()
 	  break;
 	case 0xB6:		/* JF0 address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (f0)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (f0) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0xB8:		/* MOV Rr,#data */
-	  intRAM[reg_pnt] = ROM (pc++);
+	  internal_ram[reg_pnt] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xB9:		/* MOV Rr,#data */
-	  intRAM[reg_pnt + 1] = ROM (pc++);
+	  internal_ram[reg_pnt + 1] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xBA:		/* MOV Rr,#data */
-	  intRAM[reg_pnt + 2] = ROM (pc++);
+	  internal_ram[reg_pnt + 2] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xBB:		/* MOV Rr,#data */
-	  intRAM[reg_pnt + 3] = ROM (pc++);
+	  internal_ram[reg_pnt + 3] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xBC:		/* MOV Rr,#data */
-	  intRAM[reg_pnt + 4] = ROM (pc++);
+	  internal_ram[reg_pnt + 4] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xBD:		/* MOV Rr,#data */
-	  intRAM[reg_pnt + 5] = ROM (pc++);
+	  internal_ram[reg_pnt + 5] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xBE:		/* MOV Rr,#data */
-	  intRAM[reg_pnt + 6] = ROM (pc++);
+	  internal_ram[reg_pnt + 6] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xBF:		/* MOV Rr,#data */
-	  intRAM[reg_pnt + 7] = ROM (pc++);
+	  internal_ram[reg_pnt + 7] = ROM (pc++);
 	  clk += 2;
 	  break;
 	case 0xC4:		/* JMP */
@@ -1148,16 +1106,15 @@ void exec_8048 ()
 	  clk += 2;
 	  break;
 	case 0xC5:		/* SEL RB0 */
-	  bs = reg_pnt = 0;
+	  bs = 0;
+	  reg_pnt = 0x00;
 	  clk++;
 	  break;
 	case 0xC6:		/* JZ address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc == 0)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc == 0) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0xC7:		/* MOV A,PSW */
 	  clk++;
@@ -1165,52 +1122,50 @@ void exec_8048 ()
 	  acc = psw;
 	  break;
 	case 0xC8:		/* DEC Rr */
-	  intRAM[reg_pnt]--;
+	  internal_ram[reg_pnt]--;
 	  clk++;
 	  break;
 	case 0xC9:		/* DEC Rr */
-	  intRAM[reg_pnt + 1]--;
+	  internal_ram[reg_pnt + 1]--;
 	  clk++;
 	  break;
 	case 0xCA:		/* DEC Rr */
-	  intRAM[reg_pnt + 2]--;
+	  internal_ram[reg_pnt + 2]--;
 	  clk++;
 	  break;
 	case 0xCB:		/* DEC Rr */
-	  intRAM[reg_pnt + 3]--;
+	  internal_ram[reg_pnt + 3]--;
 	  clk++;
 	  break;
 	case 0xCC:		/* DEC Rr */
-	  intRAM[reg_pnt + 4]--;
+	  internal_ram[reg_pnt + 4]--;
 	  clk++;
 	  break;
 	case 0xCD:		/* DEC Rr */
-	  intRAM[reg_pnt + 5]--;
+	  internal_ram[reg_pnt + 5]--;
 	  clk++;
 	  break;
 	case 0xCE:		/* DEC Rr */
-	  intRAM[reg_pnt + 6]--;
+	  internal_ram[reg_pnt + 6]--;
 	  clk++;
 	  break;
 	case 0xCF:		/* DEC Rr */
-	  intRAM[reg_pnt + 7]--;
+	  internal_ram[reg_pnt + 7]--;
 	  clk++;
 	  break;
 	case 0xD0:		/* XRL A,@Ri */
-	  acc = acc ^ intRAM[intRAM[reg_pnt] & 0x3F];
+	  acc = acc ^ internal_ram[internal_ram[reg_pnt] & 0x3F];
 	  clk++;
 	  break;
 	case 0xD1:		/* XRL A,@Ri */
-	  acc = acc ^ intRAM[intRAM[reg_pnt + 1] & 0x3F];
+	  acc = acc ^ internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
 	  clk++;
 	  break;
 	case 0xD2:		/* JBb address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc & 0x40)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc & 0x40) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0xD3:		/* XRL A,#data */
 	  clk += 2;
@@ -1218,16 +1173,16 @@ void exec_8048 ()
 	  break;
 	case 0xD4:		/* CALL */
 	  make_psw ();
-	  adr = ROM (pc) | 0x600;
+	  addr = ROM (pc) | 0x600;
 	  pc++;
 	  clk += 2;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = adr;
+	  pc = addr;
 	  break;
 	case 0xD5:		/* SEL RB1 */
 	  bs = 0x10;
-	  reg_pnt = 24;
+	  reg_pnt = 0x18;
 	  clk++;
 	  break;
 	case 0xD7:		/* MOV PSW,A */
@@ -1237,49 +1192,47 @@ void exec_8048 ()
 	  ac = psw & 0x40;
 	  f0 = psw & 0x20;
 	  bs = psw & 0x10;
-	  if (bs)
-	    reg_pnt = 24;
-	  else
-	    reg_pnt = 0;
+	  if (bs) reg_pnt = 0x18;
+	  else reg_pnt = 0x00;
 	  sp = (psw & 0x07) << 1;
 	  sp += 8;
 	  break;
 	case 0xD8:		/* XRL A,Rr */
-	  acc = acc ^ intRAM[reg_pnt];
+	  acc = acc ^ internal_ram[reg_pnt];
 	  clk++;
 	  break;
 	case 0xD9:		/* XRL A,Rr */
-	  acc = acc ^ intRAM[reg_pnt + 1];
+	  acc = acc ^ internal_ram[reg_pnt + 1];
 	  clk++;
 	  break;
 	case 0xDA:		/* XRL A,Rr */
-	  acc = acc ^ intRAM[reg_pnt + 2];
+	  acc = acc ^ internal_ram[reg_pnt + 2];
 	  clk++;
 	  break;
 	case 0xDB:		/* XRL A,Rr */
-	  acc = acc ^ intRAM[reg_pnt + 3];
+	  acc = acc ^ internal_ram[reg_pnt + 3];
 	  clk++;
 	  break;
 	case 0xDC:		/* XRL A,Rr */
-	  acc = acc ^ intRAM[reg_pnt + 4];
+	  acc = acc ^ internal_ram[reg_pnt + 4];
 	  clk++;
 	  break;
 	case 0xDD:		/* XRL A,Rr */
-	  acc = acc ^ intRAM[reg_pnt + 5];
+	  acc = acc ^ internal_ram[reg_pnt + 5];
 	  clk++;
 	  break;
 	case 0xDE:		/* XRL A,Rr */
-	  acc = acc ^ intRAM[reg_pnt + 6];
+	  acc = acc ^ internal_ram[reg_pnt + 6];
 	  clk++;
 	  break;
 	case 0xDF:		/* XRL A,Rr */
-	  acc = acc ^ intRAM[reg_pnt + 7];
+	  acc = acc ^ internal_ram[reg_pnt + 7];
 	  clk++;
 	  break;
 	case 0xE3:		/* MOVP3 A,@A */
 
-	  adr = 0x300 | acc;
-	  acc = ROM (adr);
+	  addr = 0x300 | acc;
+	  acc = ROM (addr);
 	  clk += 2;
 	  break;
 	case 0xE4:		/* JMP */
@@ -1291,194 +1244,176 @@ void exec_8048 ()
 	  break;
 	case 0xE6:		/* JNC address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (!cy)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (!cy) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0xE7:		/* RL A */
 	  clk++;
-	  dat = acc & 0x80;
+	  data = acc & 0x80;
 	  acc = acc << 1;
-	  if (dat)
-	    acc = acc | 0x01;
-	  else
-	    acc = acc & 0xFE;
+	  if (data) acc = acc | 0x01;
+	  else acc = acc & 0xFE;
 	  break;
 	case 0xE8:		/* DJNZ Rr,address */
 	  clk += 2;
-	  intRAM[reg_pnt]--;
-	  dat = ROM (pc);
-	  if (intRAM[reg_pnt] != 0)
+	  internal_ram[reg_pnt]--;
+	  data = ROM (pc);
+	  if (internal_ram[reg_pnt] != 0)
 	    {
 	      pc = pc & 0xF00;
-	      pc = pc | dat;
+	      pc = pc | data;
 	    }
-	  else
-	    pc++;
+	  else pc++;
 	  break;
 	case 0xE9:		/* DJNZ Rr,address */
 	  clk += 2;
-	  intRAM[reg_pnt + 1]--;
-	  dat = ROM (pc);
-	  if (intRAM[reg_pnt + 1] != 0)
+	  internal_ram[reg_pnt + 1]--;
+	  data = ROM (pc);
+	  if (internal_ram[reg_pnt + 1] != 0)
 	    {
 	      pc = pc & 0xF00;
-	      pc = pc | dat;
+	      pc = pc | data;
 	    }
-	  else
-	    pc++;
+	  else pc++;
 	  break;
 	case 0xEA:		/* DJNZ Rr,address */
 	  clk += 2;
-	  intRAM[reg_pnt + 2]--;
-	  dat = ROM (pc);
-	  if (intRAM[reg_pnt + 2] != 0)
+	  internal_ram[reg_pnt + 2]--;
+	  data = ROM (pc);
+	  if (internal_ram[reg_pnt + 2] != 0)
 	    {
 	      pc = pc & 0xF00;
-	      pc = pc | dat;
+	      pc = pc | data;
 	    }
-	  else
-	    pc++;
+	  else pc++;
 	  break;
 	case 0xEB:		/* DJNZ Rr,address */
 	  clk += 2;
-	  intRAM[reg_pnt + 3]--;
-	  dat = ROM (pc);
-	  if (intRAM[reg_pnt + 3] != 0)
+	  internal_ram[reg_pnt + 3]--;
+	  data = ROM (pc);
+	  if (internal_ram[reg_pnt + 3] != 0)
 	    {
 	      pc = pc & 0xF00;
-	      pc = pc | dat;
+	      pc = pc | data;
 	    }
-	  else
-	    pc++;
+	  else pc++;
 	  break;
 	case 0xEC:		/* DJNZ Rr,address */
 	  clk += 2;
-	  intRAM[reg_pnt + 4]--;
-	  dat = ROM (pc);
-	  if (intRAM[reg_pnt + 4] != 0)
+	  internal_ram[reg_pnt + 4]--;
+	  data = ROM (pc);
+	  if (internal_ram[reg_pnt + 4] != 0)
 	    {
 	      pc = pc & 0xF00;
-	      pc = pc | dat;
+	      pc = pc | data;
 	    }
-	  else
-	    pc++;
+	  else pc++;
 	  break;
 	case 0xED:		/* DJNZ Rr,address */
 	  clk += 2;
-	  intRAM[reg_pnt + 5]--;
-	  dat = ROM (pc);
-	  if (intRAM[reg_pnt + 5] != 0)
+	  internal_ram[reg_pnt + 5]--;
+	  data = ROM (pc);
+	  if (internal_ram[reg_pnt + 5] != 0)
 	    {
 	      pc = pc & 0xF00;
-	      pc = pc | dat;
+	      pc = pc | data;
 	    }
-	  else
-	    pc++;
+	  else pc++;
 	  break;
 	case 0xEE:		/* DJNZ Rr,address */
 	  clk += 2;
-	  intRAM[reg_pnt + 6]--;
-	  dat = ROM (pc);
-	  if (intRAM[reg_pnt + 6] != 0)
+	  internal_ram[reg_pnt + 6]--;
+	  data = ROM (pc);
+	  if (internal_ram[reg_pnt + 6] != 0)
 	    {
 	      pc = pc & 0xF00;
-	      pc = pc | dat;
+	      pc = pc | data;
 	    }
-	  else
-	    pc++;
+	  else pc++;
 	  break;
 	case 0xEF:		/* DJNZ Rr,address */
 	  clk += 2;
-	  intRAM[reg_pnt + 7]--;
-	  dat = ROM (pc);
-	  if (intRAM[reg_pnt + 7] != 0)
+	  internal_ram[reg_pnt + 7]--;
+	  data = ROM (pc);
+	  if (internal_ram[reg_pnt + 7] != 0)
 	    {
 	      pc = pc & 0xF00;
-	      pc = pc | dat;
+	      pc = pc | data;
 	    }
-	  else
-	    pc++;
+	  else pc++;
 	  break;
 	case 0xF0:		/* MOV A,@Ri */
 	  clk++;
-	  acc = intRAM[intRAM[reg_pnt] & 0x3F];
+	  acc = internal_ram[internal_ram[reg_pnt] & 0x3F];
 	  break;
 	case 0xF1:		/* MOV A,@Ri */
 	  clk++;
-	  acc = intRAM[intRAM[reg_pnt + 1] & 0x3F];
+	  acc = internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
 	  break;
 	case 0xF2:		/* JBb address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (acc & 0x80)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (acc & 0x80) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0xF4:		/* CALL */
 	  clk += 2;
 	  make_psw ();
-	  adr = ROM (pc) | 0x700;
+	  addr = ROM (pc) | 0x700;
 	  pc++;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = adr;
+	  pc = addr;
 	  break;
 	case 0xF5:		/* SEL MB1 */
 	  clk++;
 	  break;
 	case 0xF6:		/* JC address */
 	  clk += 2;
-	  dat = ROM (pc);
-	  if (cy)
-	    pc = (pc & 0xF00) | dat;
-	  else
-	    pc++;
+	  data = ROM (pc);
+	  if (cy) pc = (pc & 0xF00) | data;
+	  else pc++;
 	  break;
 	case 0xF7:		/* RLC A */
-	  dat = cy;
+	  data = cy;
 	  cy = (acc & 0x80) >> 7;
 	  acc = acc << 1;
-	  if (dat)
-	    acc = acc | 0x01;
-	  else
-	    acc = acc & 0xFE;
+	  if (data) acc = acc | 0x01;
+	  else acc = acc & 0xFE;
 	  clk++;
 	  break;
 	case 0xF8:		/* MOV A,Rr */
 	  clk++;
-	  acc = intRAM[reg_pnt];
+	  acc = internal_ram[reg_pnt];
 	  break;
 	case 0xF9:		/* MOV A,Rr */
 	  clk++;
-	  acc = intRAM[reg_pnt + 1];
+	  acc = internal_ram[reg_pnt + 1];
 	  break;
 	case 0xFA:		/* MOV A,Rr */
 	  clk++;
-	  acc = intRAM[reg_pnt + 2];
+	  acc = internal_ram[reg_pnt + 2];
 	  break;
 	case 0xFB:		/* MOV A,Rr */
 	  clk++;
-	  acc = intRAM[reg_pnt + 3];
+	  acc = internal_ram[reg_pnt + 3];
 	  break;
 	case 0xFC:		/* MOV A,Rr */
 	  clk++;
-	  acc = intRAM[reg_pnt + 4];
+	  acc = internal_ram[reg_pnt + 4];
 	  break;
 	case 0xFD:		/* MOV A,Rr */
 	  clk++;
-	  acc = intRAM[reg_pnt + 5];
+	  acc = internal_ram[reg_pnt + 5];
 	  break;
 	case 0xFE:		/* MOV A,Rr */
 	  clk++;
-	  acc = intRAM[reg_pnt + 6];
+	  acc = internal_ram[reg_pnt + 6];
 	  break;
 	case 0xFF:		/* MOV A,Rr */
 	  clk++;
-	  acc = intRAM[reg_pnt + 7];
+	  acc = internal_ram[reg_pnt + 7];
 	  break;
 	}
 
@@ -1487,21 +1422,16 @@ void exec_8048 ()
       h_clk += clk;
       clk_counter += clk;
 
-      if (int_clk > clk)
-	int_clk -= clk;
-      else
-	int_clk = 0;
+      if (int_clk > clk) int_clk -= clk;
+      else int_clk = 0;
 
-      if (xirq_pend)
-	ext_irq ();
-      if (tirq_pend)
-	timer_irq ();
+      if (xirq_pend) ext_irq ();
+      if (tirq_pend) timer_irq ();
 
       if (h_clk > LINECNT - 1)
 	{
 	  h_clk -= LINECNT;
-	  if (enahirq && (VDCwrite[0xA0] & 0x01))
-	    ext_irq ();
+	  if (enahirq && (VDCwrite[0xA0] & 0x01)) ext_irq ();
 	  if (count_on && mstate == 0)
 	    {
 	      itimer++;
@@ -1529,8 +1459,7 @@ void exec_8048 ()
 	    }
 	}
 
-      if ((mstate == 0) && (master_clk > VBLCLK))
-	handle_vbl ();
+      if ((mstate == 0) && (master_clk > VBLCLK)) handle_vbl ();
 
       if ((mstate == 1) && (master_clk > evblclk))
 	{
