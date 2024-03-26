@@ -1,10 +1,5 @@
-#ifdef __O2EM_SDL__
-
 #include <SDL/SDL.h>
 #include <SDL/SDL_rotozoom.h>
-
-#ifndef __O2EM_SDL_H__
-#define __O2EM_SDL_H__
 
 #define KEY_LEFT SDLK_LEFT
 #define KEY_TIGHT SDLK_RIGHT
@@ -22,7 +17,6 @@
 #define KEY_PLUS_PAD SDLK_KP_PLUS
 #define KEY_EQUALS SDLK_EQUALS
 #define KEY_ESC SDLK_ESCAPE
-
 
 #define KEY_0_PAD SDLK_KP0
 #define KEY_1_PAD SDLK_KP1
@@ -125,7 +119,6 @@
 #define KEY_SCRLOCK SDLK_SCROLLOCK
 #define KEY_NUMLOCK SDLK_NUMLOCK
 
-
 #define KEY_TILDE 0
 
 #define KB_CAPSLOCK_FLAG 1
@@ -143,7 +136,6 @@ int SCREEN_H;
 
 #define SWITCH_PAUSE 1
 #define SYSTEM_AUTODETECT  0
-#define END_OF_MAIN()/*TODO REAL FUNCTION*/
 
 typedef int AUDIOSTREAM;
 typedef int SAMPLE;
@@ -153,107 +145,66 @@ typedef SDL_Surface BITMAP;
 extern SDL_Color colors[256];
 struct Axis
 {
-	int d1, d2;
+  int d1, d2;
 };
 
 struct Stick
 {
-	struct Axis axis[2];
+  struct Axis axis[2];
 };
 struct Button
 {
-	int b;
+  int b;
 };
 struct Joystick
 {
-	struct Stick stick[4];
-	struct Button button[4];
+  struct Stick stick[4];
+  struct Button button[4];
 };
 struct Joystick joy[2];
 
-/*TODO downcase*/
 int DISPLAY_DEPTH;
 void *font;
 
 #define KEY_MAX SDLK_LAST
 Uint8 *key;
 
-char allegro_error[1024];
 BITMAP *screen;
 
-int key_shifts; /* TODO used in vmachine.c but never init */
+int key_shifts;
 
-int num_joysticks; /* TODO used in vmachine.c but never init */
+int num_joysticks;
 
+int install_keyboard ();
+int poll_keyboard ();
+int keyboard_needs_poll ();
+void remove_keyboard ();
 
-/* values of allegro*/
-#define TRUE -1
-#define FALSE 0
+int install_joystick (int joytype);
 
+int set_display_switch_mode (int mode);
+BITMAP *create_bitmap (int w, int h);
+void clear (BITMAP * bitmap);
+void set_color_depth (int depth);
+int set_gfx_mode (int card, int w, int h, int v_w, int v_h);
+void set_palette (SDL_Color * p);
+void get_palette (SDL_Color * p);
+int check_palette (SDL_Color * p);
+void set_window_title (char *name);
+void acquire_screen ();
+void release_screen ();
+unsigned char *get_raw_pixel_line (SDL_Surface * pSurface, int y);
+unsigned char *get_raw_pixel (SDL_Surface * pSurface, int x, int y);
 
-/* keyboard function*/
-int install_keyboard();
-int poll_keyboard();
-int keyboard_needs_poll();
-void remove_keyboard();
+void textout_centre_ex (BITMAP * bmp, void *f, const char *s, int x, int y, int color, int bg);
+void textprintf_ex (BITMAP * bmp, void *f, int x, int y, int color, int bg, const char *fmt, ...);
 
-int install_joystick(int joytype);
+void stretch_blit (BITMAP * source, BITMAP * dest, int source_x, int source_y, int source_width, int source_height, int dest_x, int dest_y, int dest_width, int dest_height);
 
-/* gfx */
-int set_display_switch_mode(int mode);
-BITMAP *create_bitmap(int w, int h);
-void clear(BITMAP *bitmap);
-void set_color_depth(int depth);
-int set_gfx_mode(int card, int w, int h, int v_w, int v_h);
-void set_palette(SDL_Color *p);
-void get_palette(SDL_Color *p);
-int check_palette(SDL_Color *p);
-void set_window_title(char * name);
-void acquire_screen();
-void release_screen();
-unsigned char *get_raw_pixel_line(SDL_Surface *pSurface, int y);
-unsigned char *get_raw_pixel(SDL_Surface *pSurface, int x, int y);
+void rectfill (BITMAP * bmp, int x1, int y1, int x2, int y2, int color);
+void line (BITMAP * bmp, int x1, int y1, int x2, int y2, int color);
 
-
-void textout_centre_ex(BITMAP *bmp, void *f, const char *s, int x, int y, int color, int bg);
-void textprintf_ex(BITMAP *bmp, void *f, int x, int y, int color, int bg, const char *fmt, ...);
-
-void stretch_blit(BITMAP *source, BITMAP *dest, int source_x, int source_y, int source_width, int source_height,
-	int dest_x, int dest_y, int dest_width, int dest_height);
-
-void rectfill(BITMAP *bmp,int x1, int y1, int x2, int y2, int color);
-void line(BITMAP *bmp, int x1, int y1, int x2, int y2, int color);
-
-
-/* misc function*/
-void allegro_init();
-char *strlwr(char *str);
-char *strupr(char *str);
-int install_timer();
-void rest(unsigned int time);
-
-/* sound function */
-typedef enum { DIGI_AUTODETECT } DigitalType;
-typedef enum { MIDI_NONE } MidiType;
-void *get_audio_stream_buffer(AUDIOSTREAM *stream);
-void free_audio_stream_buffer(AUDIOSTREAM *stream);
-void stop_audio_stream(AUDIOSTREAM *stream);
-int install_sound(int digi, int midi, const char *cfg_path);
-void remove_sound();
-void set_volume(int digi_volume, int midi_volume);
-AUDIOSTREAM *play_audio_stream(int len, int bits, int stereo, int freq, int vol, int pan);
-int voice_get_position(int voice);
-int allocate_voice(const SAMPLE *spl);
-void voice_start(int voice_num);
-void voice_stop(int voice);
-void reallocate_voice(int voice, const SAMPLE *spl);
-SAMPLE *load_sample(const char *filename);
-void destroy_sample(SAMPLE *spl);
-void set_volume(int digi_volume, int midi_volume);
-void voice_set_volume(int voice, int volume);
-
-
-
-#endif
-#endif
-
+char *strlwr (char *str);
+char *strupr (char *str);
+int install_timer ();
+void rest (unsigned int time);

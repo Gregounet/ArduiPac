@@ -3,6 +3,6 @@
 
 #define TICKSPERSEC 10000
 
-unsigned long gettimeticks();
+unsigned long gettimeticks ();
 
 #endif
