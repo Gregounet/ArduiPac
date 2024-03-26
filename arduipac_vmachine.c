@@ -1,55 +1,38 @@
 #include <stdlib.h>
-#include <time.h>
 
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
-#include "arduipac.h"
 #include "arduipac_timefunc.h"
 #include "arduipac_vmachine.h"
-#include "arduipac_sdl.h"
+#include "arduipac_graphics.h"
 
 static uint8_t x_latch, y_latch;
 static int romlatch = 0;
 static uint8_t line_count;
 static int fps;
 
-static uint8_t snapedlines[MAXLINES + 2 * MAXSNAP][256][2];
-
 int evblclk;
 
-struct resource app_data;
 int frame = 0;
-uint8_t dbstick1, dbstick2;
 
 int int_clk;			/* counter for length of /INT pulses */
 int master_clk;			/* Master clock */
 int h_clk;			/* horizontal clock */
 unsigned long clk_counter;
-int last_line;
 int key2vcnt = 0;
 int mstate;
 
 int pendirq = 0;
 int enahirq = 1;
 long regionoff = 0xFFFF;
-int mxsnap = 2;
 int sproff = 0;			/* sprite offset */
 
 uint8_t external_ram[256];
 uint8_t external_rom[1024];
 
-uint8_t VDCwrite[256];
-uint8_t ColorVector[MAXLINES];
-uint8_t AudioVector[MAXLINES];
-uint8_t *rom;
-
 void run ()
 {
-  while (!key_done)
-    {
-      exec_8048 ();
-    }
-  close_display ();
+  exec_8048 ();
 }
 
 void handle_vbl ()
@@ -69,9 +52,8 @@ void handle_evbl ()
   unsigned long d, f, tick_tmp;
   int antiloop;
 
-  i = (15 * app_data.speed / 100);
+  i = 15 ;
   rest_cnt = (rest_cnt + 1) % (i < 5 ? 5 : i);
-  last_line = 0;
   master_clk -= evblclk;
   frame++;
 
@@ -84,33 +66,20 @@ void handle_evbl ()
   if (key2vcnt++ > 10)
     {
       key2vcnt = 0;
-      for (i = 0; i < KEY_MAX; i++)
-	key2[i] = 0;
+      for (i = 0; i < KEY_MAX; i++) key2[i] = 0;
       dbstick1 = dbstick2 = 0;
     }
-  if (app_data.limit)
-    {
-      d = (TICKSPERSEC * 100) / (app_data.speed * fps);
-      f = ((d + last - gettimeticks ()) * 1000) / TICKSPERSEC;
-      antiloop = 0;
-      idx++;
-      if (first == 0)
-	first = gettimeticks () - 1;
-      tick_tmp = gettimeticks ();
-      if (idx * TICKSPERSEC / (tick_tmp - first) < fps)
-	d = 0;
-      if (f > 0)
-	{
-	}
-      while (gettimeticks () - last < d && antiloop < 1000000)
-	{
-	  antiloop++;
-	}
-      if (antiloop >= 1000000)
-	{
-	}
-      last = gettimeticks ();
-    }
+
+  d = TICKSPERSEC / fps);
+  f = ((d + last - gettimeticks ()) * 1000) / TICKSPERSEC;
+  antiloop = 0;
+  idx++;
+  if (first == 0) first = gettimeticks () - 1;
+  tick_tmp = gettimeticks ();
+  if (idx * TICKSPERSEC / (tick_tmp - first) < fps) d = 0;
+  while (gettimeticks () - last < d && antiloop < 1000000) antiloop++;
+  last = gettimeticks ();
+
   mstate = 0;
 
 }
@@ -122,7 +91,7 @@ void handle_evbll ()
   int i;
   unsigned long d, f;
   int antiloop = 0;
-  i = (15 * app_data.speed / 100);
+  i = 15;
   rest_cnt = (rest_cnt + 1) % (i < 5 ? 5 : i);
 
   for (i = 150; i < MAXLINES; i++)
@@ -138,27 +107,18 @@ void handle_evbll ()
 	key2[i] = 0;
       dbstick1 = dbstick2 = 0;
     }
-  if (app_data.limit)
-    {
-      d = (TICKSPERSEC * 100) / (app_data.speed * fps);
-      f = ((d + last - gettimeticks ()) * 1000) / TICKSPERSEC;
-      antiloop = 0;
-      while (gettimeticks () - last < d && antiloop < 1000000)
-	{
-	  antiloop++;
-	}
-      if (antiloop >= 1000000)
-	{
-	}
-      last = gettimeticks ();
-    }
+
+  d = TICKSPERSEC / fps;
+  f = ((d + last - gettimeticks ()) * 1000) / TICKSPERSEC;
+  antiloop = 0;
+  while (gettimeticks () - last < d && antiloop < 1000000) antiloop++;
+  last = gettimeticks ();
   mstate = 0;
 }
 
 void init_system ()
 {
   int i, j, k;
-  last_line = 0;
   dbstick1 = 0x00;
   dbstick2 = 0x00;
   mstate = 0;
@@ -168,109 +128,15 @@ void init_system ()
   itimer = 0;
   clk_counter = 0;
 
-  //init_roms ();
-
-  for (i = 0; i < 256; i++)
-    {
-      VDCwrite[i] = 0;
-      external_ram[i] = 0;
-    }
-
-  for (i = 0; i < MAXLINES; i++)
-    AudioVector[i] = ColorVector[i] = 0;
-
-  for (i = 0; i < MAXLINES + 2 * MAXSNAP; i++)
-    for (j = 0; j < 256; j++)
-      for (k = 0; k < 2; k++)
-	snapedlines[i][j][k] = 0;
-
-  if (app_data.stick[0] == 2 || app_data.stick[1] == 2)
-    {
-      i = install_joystick (JOY_TYPE_AUTODETECT);
-      if (i || (num_joysticks < 1))
-	{
-	  o2em_clean_quit (EXIT_FAILURE);
-	}
-    }
-  for (i = 0; i < KEY_MAX; i++) key2[i] = 0;
-  key2vcnt = 0;
+  for (i = 0; i < 256; i++) external_ram[i] = 0;
 
   clear_collision ();
 }
 
 uint8_t read_t1 ()
 {
-  /*17 */
-  if ((h_clk > 16) || (master_clk > VBLCLK))
-    return 1;
-  else
-    return 0;
-}
-
-void write_p1 (uint8_t d)
-{
-  if ((d & 0x80) != (p1 & 0x80))
-    {
-      int i, l;
-      l =
-	snapline ((int) ((float) master_clk / 22.0 + 0.1), VDCwrite[0xA3], 1);
-      for (i = l; i < MAXLINES; i++)
-	ColorVector[i] = (VDCwrite[0xA3] & 0x7f) | (d & 0x80);
-    }
-  p1 = d;
-  if (app_data.bank == 2)
-    {
-      //rom = rom_table[~p1 & 0x01];
-    }
-  else if (app_data.bank == 3)
-    {
-      //rom = rom_table[~p1 & 0x03];
-    }
-  else if (app_data.bank == 4)
-    {
-      //rom = rom_table[(p1 & 1) ? 0 : romlatch];
-    }
-}
-
-uint8_t read_P2 ()
-{
-  int i, si, so, km;
-
-  if (NeedsPoll)
-    poll_keyboard ();
-
-  if (!(p1 & 0x04))
-    {
-      si = (p2 & 7);
-      so = 0xff;
-      if (si < 6)
-	{
-	  for (i = 0; i < 8; i++)
-	    {
-	      km = key_map[si][i];
-	      if ((key[km]
-		   && ((!joykeystab[km]) || (key_shifts & KB_CAPSLOCK_FLAG)))
-		  || (key2[km]))
-		{
-		  so = i ^ 0x07;
-		}
-	    }
-	}
-      if (so != 0xff)
-	{
-	  p2 = p2 & 0x0F;
-	  p2 = p2 | (so << 5);
-	}
-      else
-	{
-	  p2 = p2 | 0xF0;
-	}
-    }
-  else
-    {
-      p2 = p2 | 0xF0;
-    }
-  return p2;
+  if ((h_clk > 16) || (master_clk > VBLCLK)) return 1;
+  else return 0;
 }
 
 uint8_t ext_read (uint16_t addr)
@@ -287,12 +153,9 @@ uint8_t ext_read (uint16_t addr)
 	{
 	case 0xA1:
 	  d = VDCwrite[0xA0] & 0x02;
-	  if (master_clk > VBLCLK)
-	    d = d | 0x08;
-	  if (h_clk < (LINECNT - 7))
-	    d = d | 0x01;
-	  if (sound_IRQ)
-	    d = d | 0x04;
+	  if (master_clk > VBLCLK) d = d | 0x08;
+	  if (h_clk < (LINECNT - 7)) d = d | 0x01;
+	  if (sound_IRQ) d = d | 0x04;
 	  sound_IRQ = 0;
 	  return d;
 	case 0xA2:		/* 0xA2 vdc_collision http://soeren.informationstheater.de/g7000/hardware.html */
@@ -303,116 +166,41 @@ uint8_t ext_read (uint16_t addr)
 	    {
 	      if (si & m)
 		{
-		  if (coltab[1] & m)
-		    d = d | (coltab[1] & (m ^ 0xFF));
-		  if (coltab[2] & m)
-		    d = d | (coltab[2] & (m ^ 0xFF));
-		  if (coltab[4] & m)
-		    d = d | (coltab[4] & (m ^ 0xFF));
-		  if (coltab[8] & m)
-		    d = d | (coltab[8] & (m ^ 0xFF));
-		  if (coltab[0x10] & m)
-		    d = d | (coltab[0x10] & (m ^ 0xFF));
-		  if (coltab[0x20] & m)
-		    d = d | (coltab[0x20] & (m ^ 0xFF));
-		  if (coltab[0x80] & m)
-		    d = d | (coltab[0x80] & (m ^ 0xFF));
+		  if (collision_table[1] & m) d = d | (collision_table[1] & (m ^ 0xFF));
+		  if (collision_table[2] & m) d = d | (collision_table[2] & (m ^ 0xFF));
+		  if (collision_table[4] & m) d = d | (collision_table[4] & (m ^ 0xFF));
+		  if (collision_table[8] & m) d = d | (collision_table[8] & (m ^ 0xFF));
+		  if (collision_table[0x10] & m) d = d | (collision_table[0x10] & (m ^ 0xFF));
+		  if (collision_table[0x20] & m) d = d | (collision_table[0x20] & (m ^ 0xFF));
+		  if (collision_table[0x80] & m) d = d | (collision_table[0x80] & (m ^ 0xFF));
 		}
 	      m = m << 1;
 	    }
 	  clear_collision ();
 	  return d;
 	case 0xA5:
-	  if (!(VDCwrite[0xA0] & 0x02))
-	    {
-	      return x_latch;
-	    }
+	  if (!(VDCwrite[0xA0] & 0x02)) return x_latch;
 	  else
 	    {
 	      x_latch = h_clk * 12;
 	      return x_latch;
 	    }
 	case 0xA4:
-	  if (!(VDCwrite[0xA0] & 0x02))
-	    {
-	      return y_latch;
-	    }
+	  if (!(VDCwrite[0xA0] & 0x02)) return y_latch;
 	  else
 	    {
 	      y_latch = master_clk / 22;
-	      if (y_latch > 241)
-		y_latch = 0xFF;
+	      if (y_latch > 241) y_latch = 0xFF;
 	      return y_latch;
 	    }
 	default:
 	  return VDCwrite[addr];
 	}
     }
-  else if (!(p1 & 0x10))
-    {
-      return external_ram[addr & 0xFF];
-    }
-  else if (app_data.exrom && (p1 & 0x02))
-    {
-      return external_rom[(p2 << 8) | (addr & 0xFF)];
-    }
+  else if (!(p1 & 0x10)) return external_ram[addr & 0xFF];
+  else if (p1 & 0x02))return external_rom[(p2 << 8) | (addr & 0xFF)];
 
   return 0;
-}
-
-uint8_t in_bus ()
-{
-  uint8_t si = 0, d = 0, mode = 0, jn = 0, sticknum = 0;
-
-  if ((p1 & 0x08) && (p1 & 0x10))
-    {
-      if (!(p1 & 0x04))
-	{
-	  si = (p2 & 7);
-	}
-      d = 0xFF;
-      if (si == 1)
-	{
-	  mode = app_data.stick[0];
-	  jn = 0;
-	  sticknum = app_data.sticknumber[0] - 1;
-	}
-      else
-	{
-	  mode = app_data.stick[1];
-	  jn = 1;
-	  sticknum = app_data.sticknumber[1] - 1;
-	}
-      switch (mode)
-	{
-	case 1:
-	  d = keyjoy (jn);
-	  break;
-	case 2:
-	  if (joy[sticknum].stick[0].axis[1].d1)
-	    d &= 0xFE;		/* joy_up */
-	  if (joy[sticknum].stick[0].axis[0].d2)
-	    d &= 0xFD;		/* joy_right */
-	  if (joy[sticknum].stick[0].axis[1].d2)
-	    d &= 0xFB;		/* joy_down */
-	  if (joy[sticknum].stick[0].axis[0].d1)
-	    d &= 0xF7;		/* joy_left */
-	  if (joy[sticknum].button[0].b || joy[jn].button[1].b)
-	    d &= 0xEF;		/* both main-buttons */
-	  break;
-	}
-      if (si == 1)
-	{
-	  if (dbstick1)
-	    d = dbstick1;
-	}
-      else
-	{
-	  if (dbstick2)
-	    d = dbstick2;
-	}
-    }
-  return d;
 }
 
 void ext_write (uint8_t dat, uint16_t addr)
@@ -428,24 +216,18 @@ void ext_write (uint8_t dat, uint16_t addr)
 	    {
 	      y_latch = master_clk / 22;
 	      x_latch = h_clk * 12;
-	      if (y_latch > 241)
-		y_latch = 0xFF;
+	      if (y_latch > 241) y_latch = 0xFF;
 	    }
-	  if ((master_clk <= VBLCLK) && (VDCwrite[0xA0] != dat))
-	    {
-	      draw_region ();
-	    }
+	  if ((master_clk <= VBLCLK) && (VDCwrite[0xA0] != dat)) draw_region ();
 	}
       else if (addr == 0xA3)
 	{
 	  l = snapline ((int) ((float) master_clk / 22.0 + 0.5), dat, 1);
-	  for (i = l; i < MAXLINES; i++)
-	    ColorVector[i] = (dat & 0x7f) | (p1 & 0x80);
+	  for (i = l; i < MAXLINES; i++) ColorVector[i] = (dat & 0x7f) | (p1 & 0x80);
 	}
       else if (addr == 0xAA)
 	{
-	  for (i = master_clk / 22; i < MAXLINES; i++)
-	    AudioVector[i] = dat;
+	  for (i = master_clk / 22; i < MAXLINES; i++) AudioVector[i] = dat;
 	}
       else if ((addr >= 0x40) && (addr <= 0x7f) && ((addr & 2) == 0))
 	{
@@ -454,55 +236,15 @@ void ext_write (uint8_t dat, uint16_t addr)
 	  addr = addr & 0x71;
 	  /* Another minor thing: the y register always returns
 	   * bit 0 as 0 */
-	  if ((addr & 1) == 0)
-	    dat = dat & 0xfe;
-	  VDCwrite[addr] = VDCwrite[addr + 4] = VDCwrite[addr + 8] =
-	    VDCwrite[addr + 12] = dat;
+	  if ((addr & 1) == 0) dat = dat & 0xfe;
+	  VDCwrite[addr] = VDCwrite[addr + 4] = VDCwrite[addr + 8] = VDCwrite[addr + 12] = dat;
 	}
       VDCwrite[addr] = dat;
     }
   else if (!(p1 & 0x10) && !(p1 & 0x40))
     {
       addr = addr & 0xFF;
-
-      if (addr < 0x80)
-	{
-	  /* Handle ext RAM Write */
-	  external_ram[addr] = dat;
-	}
-      else
-	{
-	  if (app_data.bank == 4)
-	    {
-	      romlatch = (~dat) & 7;
-	      // nrom = rom_table[(p1 & 1) ? 0 : romlatch];
-	    }
-	}
+      if (addr < 0x80) external_ram[addr] = dat;
+      else if (app_data.bank == 4) romlatch = (~dat) & 7;
     }
-  else if (!(p1 & 0x20))
-    {
-      /* Write to a Videopac+ register */
-    }
-}
-
-int snapline (int pos, uint8_t reg, int t)
-{
-  int i;
-  if (pos < MAXLINES + MAXSNAP + MAXSNAP)
-    {
-      for (i = 0; i < mxsnap; i++)
-	{
-	  if (snapedlines[pos + MAXSNAP - i][reg][t])
-	    return pos - i;
-	  if (snapedlines[pos + MAXSNAP + i][reg][t])
-	    return pos + i;
-	}
-      snapedlines[pos + MAXSNAP][reg][t] = 1;
-    }
-  return pos;
-}
-
-void read_a_char (uint16_t * c, size_t s, FILE * fn)
-{
-  fread (c, s, 1, fn);
 }

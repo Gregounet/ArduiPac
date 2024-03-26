@@ -1,7 +1,7 @@
 #include <stdint.h>
 
 #include "arduipac_8048.h"
-// #include "arduipac_8245.h"
+#include "arduipac_8245.h"
 #include "arduipac_vmachine.h"
 
 #define push(d) {internal_ram[sp++] = (d); if (sp > 23) sp = 8;}
@@ -9,7 +9,7 @@
 #define make_psw() {psw = (cy << 7) | ac | f0 | bs | 0x08; psw = psw | ((sp - 8) >> 1);}
 #define illegal(i) {}
 #define undef(i) {}
-#define ROM(addr) (rom[(addr) & 0xFFF])
+#define ROM(addr) (external_rom[(addr) & 0xFFF])
 
 uint8_t internal_ram[64];
 
@@ -159,10 +159,10 @@ void exec_8048 ()
 	  break;
 	case 0x03:		/* ADD A,#data */
 	  clk += 2;
-	  cy = ac = 0;
+	  cy = 0;
+	  ac = 0;
 	  data = ROM (pc++);
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f)
-	    ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -225,7 +225,7 @@ void exec_8048 ()
 	  clk += 2;
 	  data = ROM (pc++);
 	  ac = 0;
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -316,8 +316,9 @@ void exec_8048 ()
 	case 0x26:		/* JNT0 */
 	  clk += 2;
 	  data = ROM (pc);
-	  if (!get_voice_status ()) pc = (pc & 0xF00) | data;
-	  else pc++;
+	  // if (!get_voice_status ()) pc = (pc & 0xF00) | data;
+	  // else pc++;
+	  pc = (pc & 0xF00) | data;
 	  break;
 	case 0x27:		/* CLR A */
 	  clk++;
@@ -412,8 +413,9 @@ void exec_8048 ()
 	case 0x36:		/* JT0 */
 	  clk += 2;
 	  data = ROM (pc);
-	  if (get_voice_status ()) pc = (pc & 0xF00) | data;
-	  else pc++;
+	  // if (get_voice_status ()) pc = (pc & 0xF00) | data;
+	  // else pc++;
+	  pc++;
 	  break;
 	case 0x37:		/* CPL A */
 	  acc = acc ^ 0xFF;
@@ -601,7 +603,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[internal_ram[reg_pnt] & 0x3F];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -610,7 +612,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -639,7 +641,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[reg_pnt];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -648,7 +650,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[reg_pnt + 1];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -657,7 +659,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[reg_pnt + 2];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -666,7 +668,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[reg_pnt + 3];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -675,7 +677,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[reg_pnt + 4];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -684,7 +686,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[reg_pnt + 5];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -693,7 +695,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[reg_pnt + 6];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -702,7 +704,7 @@ void exec_8048 ()
 	  clk++;
 	  cy = ac = 0;
 	  data = internal_ram[reg_pnt + 7];
-	  if (((acc & 0x0f) + (data & 0x0f)) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
 	  temp = acc + data;
 	  if (temp > 0xFF) cy = 1;
 	  acc = (temp & 0xFF);
@@ -711,7 +713,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[internal_ram[reg_pnt] & 0x3F];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -721,7 +723,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[internal_ram[reg_pnt + 1] & 0x3F];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -765,7 +767,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[reg_pnt];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -775,7 +777,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[reg_pnt + 1];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -785,7 +787,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[reg_pnt + 2];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -795,7 +797,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[reg_pnt + 3];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -805,7 +807,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[reg_pnt + 4];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -815,7 +817,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[reg_pnt + 5];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -825,7 +827,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[reg_pnt + 6];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;
@@ -835,7 +837,7 @@ void exec_8048 ()
 	  clk++;
 	  ac = 0;
 	  data = internal_ram[reg_pnt + 7];
-	  if (((acc & 0x0f) + (data & 0x0f) + cy) > 0x0f) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0;
 	  if (temp > 0xFF) cy = 1;

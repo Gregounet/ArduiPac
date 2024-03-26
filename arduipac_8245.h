@@ -3,16 +3,18 @@
 
 #include "arduipac_sdl.h"
 
-#define BMPW 340
-#define BMPH 250
-#define WNDW 320
-#define WNDH 240
+#define BITMAP_WIDTH  340
+#define BITMAP_HEIGHT 250
+
+#define DISPLAY_WIDTH  320
+#define DISPLAY_HEIGHT 240
 
 #define BOX_W     MIN(512, SCREEN_W-16)
 #define BOX_H     MIN(256, (SCREEN_H-64)&0xFFF0)
 
 #define BOX_L     ((SCREEN_W - BOX_W) / 2)
 #define BOX_R     ((SCREEN_W + BOX_W) / 2)
+
 #define BOX_T     ((SCREEN_H - BOX_H) / 2)
 #define BOX_B     ((SCREEN_H + BOX_H) / 2)
 
@@ -27,9 +29,7 @@ void draw_display ();
 void set_textmode ();
 void draw_region ();
 void finish_display ();
-void close_display ();
 void grmode ();
-void display_bg ();
 void clear_collision ();
 void clearscr ();
 

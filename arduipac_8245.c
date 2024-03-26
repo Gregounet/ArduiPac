@@ -1,10 +1,8 @@
 /*
  * memory map
  *
- * 0x10h-0x7Fh: vdc_charX, vdc_quadX
- *
- * 0x80h-0x9fh: vdc_sprX_shape
- * 4 sprites of 8x8
+ * 0x10-0x7F (112 bytes): vdc_charX, vdc_quadX
+ * 0x80-0x9F ( 32 bytes): vdc_sprX_shape = 4 sprites of 8x8
  *
  * */
 
@@ -13,7 +11,6 @@
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
 #include "arduipac_vmachine.h"
-#include "arduipac.h"
 #include "arduipac_cset.h"
 #include "arduipac_timefunc.h"
 #include "arduipac_sdl.h"
@@ -22,9 +19,11 @@
 #define COL_SP1   0x02
 #define COL_SP2   0x04
 #define COL_SP3   0x08
+
 #define COL_VGRID 0x10
 #define COL_HGRID 0x20
 #define COL_CHAR  0x80
+
 
 #define X_START		8
 #define Y_START		24
@@ -37,13 +36,6 @@ static long colortable[16] = {
 PALETTE colors;
 PALETTE oldcol;
 
-/* The pointer to the graphics buffer
- * The 10 first and last columns is hide
- * Same for the 5 first and last lines
- * So it is why output is 320 * 240 and BMW=340 and BMPH=250
- *
- * */
-
 static uint8_t *vscreen = NULL;
 
 static int cached_lines[MAXLINES];
@@ -52,8 +44,6 @@ uint8_t coltab[256];
 
 long clip_low;
 long clip_high;
-
-int wsize;
 
 static void create_cmap ();
 static void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col);
@@ -65,7 +55,7 @@ void draw_region ()
 {
   int i;
 
-  if (regionoff == 0xffff) i = (master_clk / (LINECNT - 1) - 5);
+  if (regionoff == 0xFFFF) i = (master_clk / (LINECNT - 1) - 5);
   else i = (master_clk / 22 + regionoff);
   i = (snapline (i, VDCwrite[0xA0], 0));
 
@@ -88,14 +78,6 @@ static void create_cmap ()
       colors[i + 32].b = colors[i].b = (colortable[i] & 0x0000FF) >> 2;
     }
 
-  for (i = 16; i < 32; i++)
-    {
-      /* Half-bright colors for the 50% scanlines */
-      colors[i + 32].r = colors[i].r = colors[i - 16].r / 2;
-      colors[i + 32].g = colors[i].g = colors[i - 16].g / 2;
-      colors[i + 32].b = colors[i].b = colors[i - 16].b / 2;
-    }
-
   for (i = 64; i < 256; i++) colors[i].r = colors[i].g = colors[i].b = 0;
   for (i = 0; i < 256; i++)
     {
@@ -105,96 +87,33 @@ static void create_cmap ()
     }
 }
 
-/* rename this function */
 void grmode ()
 {
-  set_color_depth (8);
-  wsize = app_data.wsize;
-  if (app_data.fullscreen)
-    {
-      if (app_data.scanlines)
-	{
-	  wsize = 2;
-	  if (set_gfx_mode (GFX_AUTODETECT_FULLSCREEN, 640, 480, 0, 0))
-	    {
-	      wsize = 1;
-	      if (set_gfx_mode (GFX_AUTODETECT_FULLSCREEN, 320, 240, 0, 0))
-		{
-		  o2em_clean_quit (EXIT_FAILURE);
-		}
-	    }
-	}
-      else
-	{
-	  wsize = 2;
-	  if (set_gfx_mode (GFX_AUTODETECT_FULLSCREEN, 640, 480, 0, 0))
-	    {
-	      wsize = 1;
-	      if (set_gfx_mode (GFX_AUTODETECT_FULLSCREEN, 320, 240, 0, 0))
-		{
-		  o2em_clean_quit (EXIT_FAILURE);
-		}
-	    }
-	}
-    }
-  else
-    {
-      if (set_gfx_mode
-	  (GFX_AUTODETECT_WINDOWED, WNDW * wsize, WNDH * wsize, 0, 0))
-	{
-	  wsize = 2;
-	  if (set_gfx_mode
-	      (GFX_AUTODETECT_WINDOWED, WNDW * 2, WNDH * 2, 0, 0))
-	    {
-	      if (set_gfx_mode (GFX_AUTODETECT, WNDW * 2, WNDH * 2, 0, 0))
-		{
-		  o2em_clean_quit (EXIT_FAILURE);
-		}
-	    }
-	}
-    }
-
-  if ((app_data.scanlines) && (wsize == 1))
-    {
-    }
-
-  set_palette (colors);
-  set_window_title (app_data.window_title);
-  clearscr ();
+  clearscr();
   set_display_switch_mode (SWITCH_PAUSE);
 
 }
 
 void clearscr ()
 {
-  acquire_screen ();
-  clear (screen);
-  release_screen ();
-  clear (bmpcache);
+  clear_screen(screen);
+  clear_screen(bmpcache);
 }
 
-/* d is color, what a good variable name!!
- * c is COL_HGRID(0x20 or COL_CHAR(0x80) or 8
- * */
-void mputvid (unsigned int ad, unsigned int len, uint8_t d, uint8_t c)
+// c is COL_HGRID(0x20 or COL_CHAR(0x80) or 8
+void mputvid (unsigned int ad, unsigned int len, uint8_t color, uint8_t c)
 {
   unsigned int i;
-  if (len >= sizeof (coltab))
-    {
-      return;
-    }
-  if (c >= sizeof (coltab))
-    {
-      return;
-    }
+  if (len >= sizeof (coltab)) return;
+  if (c >= sizeof (coltab)) return;
   if ((ad > (unsigned long) clip_low) && (ad < (unsigned long) clip_high))
     {
       if (((len & 3) == 0) && (sizeof (unsigned long) == 4))
 	{			/* TODO unsigned long is 8 on 64bits, this code will not work */
 	  unsigned long dddd =
-	    (((unsigned long) d) & 0xff) | ((((unsigned long) d) & 0xff) << 8)
-	    | ((((unsigned long) d) & 0xff) << 16) |
-	    ((((unsigned long) d) & 0xff) << 24);
+	    (((unsigned long) color) & 0xff) | ((((unsigned long) color) & 0xff) << 8)
+	    | ((((unsigned long) color) & 0xff) << 16) |
+	    ((((unsigned long) color) & 0xff) << 24);
 	  unsigned long cccc =
 	    (((unsigned long) c) & 0xff) | ((((unsigned long) c) & 0xff) << 8)
 	    | ((((unsigned long) c) & 0xff) << 16) |
@@ -213,7 +132,7 @@ void mputvid (unsigned int ad, unsigned int len, uint8_t d, uint8_t c)
 	{
 	  for (i = 0; i < len; i++)
 	    {
-	      vscreen[ad] = d;
+	      vscreen[ad] = color;
 	      col[ad] |= c;
 	      coltab[c] |= col[ad++];
 	    }
@@ -370,14 +289,10 @@ void finish_display ()
 
   acquire_screen ();
 
-  sn = ((wsize > 1) && (app_data.scanlines)) ? 1 : 0;
-
   for (y = 0; y < WNDH; y++)
     {
       if (!cached_lines[y + 2])
-	stretch_blit (bmp, screen,
-		      7, 2 + y,
-		      WNDW, 1, 0, y * wsize, WNDW * wsize, wsize - sn);
+	stretch_blit (bmp, screen, 7, 2 + y, WNDW, 1, 0, y,  WNDW , wsize - sn);
     }
 
   if (sn)
@@ -391,14 +306,13 @@ void finish_display ()
 		  *get_raw_pixel (bmp, x, y + 2) += 16;
 		}
 	      stretch_blit (bmp, screen, 7, 2 + y, WNDW, 1, 0,
-			    (y + 1) * wsize - 1, WNDW * wsize, 1);
+			    (y + 1) - 1, WNDW , 1);
 	      memcpy (get_raw_pixel_line (bmp, y + 2),
 		      get_raw_pixel_line (bmpcache, y + 2), bmp->w);
 	    }
 	}
     }
-  clear (screen);
-  screen_resize = rotozoomSurface (bmp, 0, wsize, 0);
+  clear_screnn(screen);
   dest_rect.x = 0;
   dest_rect.y = 0;
   dest_rect.w = WNDW;
@@ -669,26 +583,26 @@ int init_display ()
   bmp = create_bitmap (BMPW, BMPH);
   if (bmp == NULL)
     {
-      return O2EM_FAILURE;
+      return -1;
     }
   bmpcache = create_bitmap (BMPW, BMPH);
   if (bmpcache == NULL)
     {
-      /*TODO deallocate bmp */
-      return O2EM_FAILURE;
+      return -1;
     }
 #ifndef __O2EM_SDL__
   vscreen = (uint8_t *) bmp->dat;
 #else
   vscreen = (uint8_t *) bmp->pixels;
 #endif
-  clear (bmp);
-  clear (bmpcache);
+  clear_screen(bmp);
+  clear_screen(bmpcache);
+
   col = (uint8_t *) malloc (BMPW * BMPH);
   if (col == NULL)
     {
       o2em_clean_quit (EXIT_FAILURE);
     }
   memset (col, 0, BMPW * BMPH);
-  return O2EM_SUCCESS;
+  return 0;
 }
