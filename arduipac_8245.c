@@ -1,45 +1,7 @@
-/*
- * memory map
- *
- * 0x10-0x7F (112 bytes): vdc_charX, vdc_quadX
- * 0x80-0x9F ( 32 bytes): vdc_sprX_shape = 4 sprites of 8x8 (8 bytes par sprite)
- *
- * Display de 24 * 32 (384 caractères)
- * En graphique ça fait 256 * 192 (65.536 pixels)
- * En 16 couleurs ça fait deux pixels par octet donc 32 kO et il n'y a pas autant de RAM externe que ça.
- * En fait il y'a 256 octets.
- *
- * 0x00 - 0x0F = 
- * 0x10 - 0x1F = vdc_charX, vdc_quadX
- * 0x20 - 0x2F = vdc_charX, vdc_quadX 
- * 0x30 - 0x3F = vdc_charX, vdc_quadX 
- * 0x40 - 0x4F = vdc_charX, vdc_quadX 
- * 0x50 - 0x5F = vdc_charX, vdc_quadX 
- * 0x60 - 0x6F = vdc_charX, vdc_quadX 
- * 0x70 - 0x7F = vdc_charX, vdc_quadX 
- * 0x80 - 0x8F = vdc_sprX_shape   
- * 0x90 - 0x9F = vdc_sprX_shape  
- * 0xA0 - 0xAF - A0 =
- *             - A1 = VDCwrite[0xA0]
- *             - A2 = VDCwrite[0xA2] (lié à la gestion des collisions)
- * 0xB0 - 0xBF = 
- * 0xC0 - 0xCF = 
- * 0xD0 - 0xDF = 
- * 0xE0 - 0xEF = 
- * 0xF0 - 0xFF = 
- *
- * J'ai une merde sur la ROM: je croyais qu'il y'avait 1 kO seulement.
- * En fait les BIOS font 1 k0 et les programmes 2, 3 ou 4 k0.
- * Ca fait au total 3, 4 ou 5 kO.
- * Donc 11, 12 ou 13 lignes d'addresse.
- * Il y'a donc 1 k0 en interne (le BIOS) et le reste accedé autrement à l'extérieur (cartouche).
- * Comme je suppose qu'il ne s'agit pas du même espace d'adressage ça fait des adresses sur 12 lignes au maximum.
- * Je vais pour l'instant me limiter à des ROMS de 2 kO donc 11 fils d'addresse de A0 à A10 et pas de A11.
- *
- * */
-
-// #include <stdlib.h>
+#include <stdlib.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <string.h>
 
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
@@ -48,40 +10,38 @@
 #include "arduipac_timefunc.h"
 #include "arduipac_graphics.h"
 
-#define COL_SP0   0x01
-#define COL_SP1   0x02
-#define COL_SP2   0x04
-#define COL_SP3   0x08
+#define COLLISION_SP0   0x01
+#define COLLISION_SP1   0x02
+#define COLLISION_SP2   0x04
+#define COLLISION_SP3   0x08
 
-#define COL_VGRID 0x10
-#define COL_HGRID 0x20
-#define COL_CHAR  0x80
-
-static uint32_t colortable[16] = { 0x000000, 0x0E3DD4, 0x00981B, 0x00BBD9, 0xc70008, 0xCC16B3, 0x9D8710, 0xE1DEE1, 0x5F6E6B, 0x6AA1FF, 0x3DF07A, 0x31FFFF, 0xFF4255, 0xFF98FF, 0xD9AD5D, 0xFFFFFF };
-
-static uint8_t *vscreen = NULL;
+#define COLLISION_VGRID 0x10
+#define COLLISION_HGRID 0x20
+#define COLLISION_CHAR  0x80
 
 static int cached_lines[MAXLINES];
 
 uint8_t collision_table[256];
+uint8_t video_ram[256];
 
 long clip_low;
 long clip_high;
 
-static void create_cmap ();
-
-static void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col);
+static void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t color);
 static void draw_quad (uint8_t ypos, uint8_t xpos, uint8_t cp0l, uint8_t cp0h, uint8_t cp1l, uint8_t cp1h, uint8_t cp2l, uint8_t cp2h, uint8_t cp3l, uint8_t cp3h);
 static void draw_grid ();
 
-void mputvid (unsigned int ad, unsigned int len, uint8_t d, uint8_t c);
+uint8_t *bmp;
+uint8_t *bmpcache;
+uint8_t *screen;
+uint8_t *vscreen;
 
 void draw_region ()
 {
+  int last_line;
   int i;
 
   i = (master_clk / (LINECNT - 1) - 5);
-  i = (snapline (i, VDCwrite[0xA0], 0));
 
   if (i < 0) i = 0;
   clip_low = last_line * (long) BMPW;
@@ -92,71 +52,34 @@ void draw_region ()
   last_line = i;
 }
 
-static void create_cmap ()
+void mputvid (uint32_t location, uint16_t len, uint8_t color, uint16_t c)
 {
-  int i;
-  for (i = 0; i < 16; i++)
-    {
-      colors[i + 32].r = colors[i].r = (colortable[i] & 0xFF0000) >> 18;
-      colors[i + 32].g = colors[i].g = (colortable[i] & 0x00FF00) >> 10;
-      colors[i + 32].b = colors[i].b = (colortable[i] & 0x0000FF) >> 2;
-    }
-
-  for (i = 64; i < 256; i++) colors[i].r = colors[i].g = colors[i].b = 0;
-  for (i = 0; i < 256; i++)
-    {
-      colors[i].r *= 4;
-      colors[i].g *= 4;
-      colors[i].b *= 4;
-    }
-}
-
-void grmode ()
-{
-  clearscr();
-  set_display_switch_mode (SWITCH_PAUSE);
-}
-
-void clearscr ()
-{
-  clear_screen(screen);
-  clear_screen(bmpcache);
-}
-
-// c is COL_HGRID(0x20 or COL_CHAR(0x80) or 8
-void mputvid (unsigned int ad, unsigned int len, uint8_t color, uint8_t c)
-{
-  unsigned int i;
   if (len >= sizeof (collision_table)) return;
-  if (c >= sizeof (collision_table)) return;
-  if ((ad > (unsigned long) clip_low) && (ad < (unsigned long) clip_high))
+  if (c   >= sizeof (collision_table)) return;
+
+  if ((location > (uint32_t) clip_low) && (location < (uint32_t) clip_high))
     {
-      if (((len & 3) == 0) && (sizeof (unsigned long) == 4))
-	{			/* TODO unsigned long is 8 on 64bits, this code will not work */
-	  unsigned long dddd =
-	    (((unsigned long) color) & 0xff) | ((((unsigned long) color) & 0xff) << 8)
-	    | ((((unsigned long) color) & 0xff) << 16) |
-	    ((((unsigned long) color) & 0xff) << 24);
-	  unsigned long cccc =
-	    (((unsigned long) c) & 0xff) | ((((unsigned long) c) & 0xff) << 8)
-	    | ((((unsigned long) c) & 0xff) << 16) |
-	    ((((unsigned long) c) & 0xff) << 24);
-	  for (i = 0; i < len >> 2; i++)
+      if ((len & 0x03) == 0)
+      {
+	  unsigned long dddd = (((unsigned long) color) & 0xFF) | ((((unsigned long) color) & 0xFF) << 8) | ((((unsigned long) color) & 0xFF) << 16) | ((((unsigned long) color) & 0xFF) << 24);
+	  unsigned long cccc = (((unsigned long) color) & 0xFF) | ((((unsigned long) color) & 0xFF) << 8) | ((((unsigned long) color) & 0xFF) << 16) | ((((unsigned long) color) & 0xFF) << 24);
+
+	  for (uint16_t i = 0; i < (len >> 2); i++)
 	    {
-	      *((unsigned long *) (vscreen + ad)) = dddd;
-	      cccc |= *((unsigned long *) (col + ad));
-	      *((unsigned long *) (col + ad)) = cccc;
-	      collision_table[c] |= ((cccc | (cccc >> 8) | (cccc >> 16) | (cccc >> 24)) & 0xff);
-	      ad += 4;
+	      //((unsigned long *) (vscreen + ad)) = dddd; 
+	      //cccc |= *((unsigned long *) (col + ad));
+	      //*((unsigned long *) (col + ad)) = cccc; 
+	      collision_table[c] |= ((cccc | (cccc >> 8) | (cccc >> 16) | (cccc >> 24)) & 0xFF);
+	      location += 4;
 	    }
 	}
       else
 	{
-	  for (i = 0; i < len; i++)
+	  for (uint16_t i = 0; i < len; i++)
 	    {
-	      vscreen[ad] = color;
-	      col[ad] |= c;
-	      collision_table[c] |= col[ad++];
+	      vscreen[location] = color;
+	      //col[ad] |= c;
+	      //collision_table[c] |= collision[ad++];
 	    }
 	}
     }
@@ -169,21 +92,20 @@ static void draw_grid ()
   int j, i, x, w;
   uint8_t color;
 
-  if (VDCwrite[0xA0] & 0x40)
-    {
+  if (video_ram[0xA0] & 0x40)
+  {
       for (j = 0; j < 9; j++)
-	{
+      {
 	  pnt = (((j * 24) + 24) * BMPW);
 	  for (i = 0; i < 9; i++)
-	    {
+	  {
 	      pn1 = pnt + (i * 32) + 20;
-	      color = ColorVector[j * 24 + 24];
-	      mputvid (pn1, 4, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COL_HGRID);
-	      color = ColorVector[j * 24 + 25];
-	      mputvid (pn1 + BMPW, 4, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COL_HGRID);
-	      color = ColorVector[j * 24 + 26];
-	      mputvid (pn1 + BMPW * 2, 4, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COL_HGRID);
-	    }
+	      /*
+	      mputvid (pn1, 4, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COLLISION_HGRID);
+	      mputvid (pn1 + BMPW, 4, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COLLISION_HGRID);
+	      mputvid (pn1 + BMPW * 2, 4, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COLLISION_HGRID);
+	      */
+	   }
 	}
     }
 
@@ -192,38 +114,35 @@ static void draw_grid ()
     {
       pnt = (((j * 24) + 24) * BMPW);
       for (i = 0; i < 9; i++)
-	{
+      {
 	  pn1 = pnt + (i * 32) + 20;
 	  if ((pn1 + BMPW * 3 >= (unsigned long) clip_low) && (pn1 <= (unsigned long) clip_high))
-	    {
-	      d = VDCwrite[0xC0 + i];
+	  {
+	      d = video_ram[0xC0 + i];
 	      if (j == 8)
-		{
-		  d = VDCwrite[0xD0 + i];
-		  mask = 1;
-		}
+	      {
+		 d = video_ram[0xD0 + i];
+		 mask = 1;
+	      }
 	      if (d & mask)
-		{
-		  color = ColorVector[j * 24 + 24];
-		  mputvid (pn1, 36, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COL_HGRID);
-		  color = ColorVector[j * 24 + 25];
-		  mputvid (pn1 + BMPW, 36, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COL_HGRID);
-		  color = ColorVector[j * 24 + 26];
-		  mputvid (pn1 + BMPW * 2, 36, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COL_HGRID);
-		}
-	    }
+              {
+		 mputvid (pn1,            36, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COLLISION_HGRID);
+		 mputvid (pn1 + BMPW,     36, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COLLISION_HGRID);
+		 mputvid (pn1 + BMPW * 2, 36, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COLLISION_HGRID);
+	      }
+           }
 	}
       mask = mask << 1;
     }
 
   mask = 0x01;
   w = 4;
-  if (VDCwrite[0xA0] & 0x80) w = 32;
+  if (video_ram[0xA0] & 0x80) w = 32;
   for (j = 0; j < 10; j++)
     {
       pnt = (j * 32);
       mask = 0x01;
-      d = VDCwrite[0xE0 + j];
+      d = video_ram[0xE0 + j];
       for (x = 0; x < 8; x++)
 	{
 	  pn1 = pnt + (((x * 24) + 24) * BMPW) + 20;
@@ -232,10 +151,7 @@ static void draw_grid ()
 	      for (i = 0; i < 24; i++)
 		{
 		  if ((pn1 >= (unsigned long) clip_low) && (pn1 <= (unsigned long) clip_high))
-		    {
-		      color = ColorVector[x * 24 + 24 + i];
-		      mputvid (pn1, w, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COL_VGRID);
-		    }
+		      mputvid (pn1, w, (color & 0x07) | ((color & 0x40) >> 3) | (color & 0x80 ? 0 : 8), COLLISION_VGRID);
 		  pn1 += BMPW;
 		}
 	    }
@@ -244,12 +160,14 @@ static void draw_grid ()
     }
 }
 
+/*
 unsigned char * get_raw_pixel_line (BITMAP * pSurface, int y)
 {
   if (pSurface == NULL) return NULL;
   if (y < 0) return NULL;
   return pSurface->line[y];
 }
+*/
 
 void finish_display ()
 {
@@ -257,17 +175,18 @@ void finish_display ()
   static int cache_counter = 0;
   static long index = 0;
   static unsigned long fps_last = 0, t = 0, curr = 0;
-  SDL_Surface *screen_resize;
-  SDL_Rect dest_rect;
 
-  for (y = 0; y < bmp->h; y++)
-      cached_lines[y] = !memcmp (get_raw_pixel_line (bmpcache, y), get_raw_pixel_line (bmp, y), bmp->w); if (!cached_lines[y]) memcpy (get_raw_pixel_line (bmpcache, y), get_raw_pixel_line (bmp, y), bmp->w);
+  for (y = 0; y < BMPH; y++)
+      cached_lines[y] = !memcmp (get_raw_pixel_line (bmpcache, y), get_raw_pixel_line (bmp, y), BMPH);
+  if (!cached_lines[y]) memcpy (get_raw_pixel_line (bmpcache, y), get_raw_pixel_line (bmp, y), BMPW);
 
-  for (y = 0; y < 10; y++) cached_lines[(y + cache_counter) % bmp->h] = 0;
-  cache_counter = (cache_counter + 10) % bmp->h;
+  for (y = 0; y < 10; y++) cached_lines[(y + cache_counter) % BMPH] = 0;
+  cache_counter = (cache_counter + 10) % BMPH;
 
+  /*
   for (y = 0; y < WNDH; y++)
       if (!cached_lines[y + 2]) stretch_blit (bmp, screen, 7, 2 + y, WNDW, 1, 0, y,  WNDW , wsize - sn);
+      */
 
   if (sn)
     {
@@ -275,31 +194,35 @@ void finish_display ()
 	{
 	  if (!cached_lines[y + 2])
 	    {
-	      for (x = 0; x < bmp->w; x++)
-		{
-		  *get_raw_pixel (bmp, x, y + 2) += 16;
-		}
-	      stretch_blit (bmp, screen, 7, 2 + y, WNDW, 1, 0, (y + 1) - 1, WNDW , 1);
-	      memcpy (get_raw_pixel_line (bmp, y + 2), get_raw_pixel_line (bmpcache, y + 2), bmp->w);
+	      for (x = 0; x < BMPW; x++) *get_raw_pixel (bmp, x, y + 2) += 16;
+	      //stretch_blit (bmp, screen, 7, 2 + y, WNDW, 1, 0, (y + 1) - 1, WNDW , 1);
+	      memcpy (get_raw_pixel_line (bmp, y + 2), get_raw_pixel_line (bmpcache, y + 2), BMPH);
 	    }
 	}
     }
   clear_screen(screen);
+  /*
   dest_rect.x = 0;
   dest_rect.y = 0;
   dest_rect.w = WNDW;
   dest_rect.h = WNDH;
-  SDL_BlitSurface (screen_resize, NULL, screen, &dest_rect);
-  SDL_FreeSurface (screen_resize);
-  release_screen ();
+  */
+}
+
+void clear_screen(uint8_t *bitmap)
+{
 }
 
 void clear_collision ()
 {
-  collision_table[0x01] = collision_table[0x02] = 0;
-  collision_table[0x04] = collision_table[0x08] = 0;
-  collision_table[0x10] = collision_table[0x20] = 0;
-  collision_table[0x40] = collision_table[0x80] = 0;
+  collision_table[0x01] = 0;
+  collision_table[0x02] = 0;
+  collision_table[0x04] = 0;
+  collision_table[0x08] = 0;
+  collision_table[0x10] = 0;
+  collision_table[0x20] = 0;
+  collision_table[0x40] = 0;
+  collision_table[0x80] = 0;
 }
 
 void draw_display ()
@@ -308,40 +231,24 @@ void draw_display ()
   uint8_t y, b, d1, cl, c;
 
   unsigned int pnt, pnt2;
-  if (BMPW < 0 || vscreen == NULL) return;
 
-  for (i = clip_low / BMPW; i < clip_high / BMPW; i++) memset (vscreen + i * BMPW, ((ColorVector[i] & 0x38) >> 3) | (ColorVector[i] & 0x80 ? 0 : 8), BMPW);
+  for (i = clip_low / BMPW; i < clip_high / BMPW; i++) memset (vscreen + i * BMPW,  0x38 >> 3, BMPW);
 
-  if (VDCwrite[0xA0] & 0x08)	/* 0xA0 Bit 3 If this bit is 1 the grid is displayed. */
-    draw_grid ();
-
-
-  /* 10h-7Fh: vdc_charX, vdc_quadX http://soeren.informationstheater.de/g7000/hardware.html
-   * Every char (and sub-quad) has a set of 4 control registers.
-   * Char control 0       This register holds the Y position of the char.
-   * Char control 1       This registers holds the X position of the char.
-   * Char control 2       This register holds the lowest 8 bits of the charset pointer.
-   * Char control 3       This register is used bitwise.
-   *  Bit 0       This is bit 8 of the charset pointer, the highest bit.
-   *  Bit 1       This bit is the red component for the char color.
-   *  Bit 2       This bit is the green component for the char color.
-   *  Bit 3       This bit is the blue component for the char color.
-   * */
-  for (i = 0x10; i < 0x40; i += 4)
-    draw_char (VDCwrite[i], VDCwrite[i + 1], VDCwrite[i + 2], VDCwrite[i + 3]);
+  if (video_ram[0xA0] & 0x08) draw_grid ();
+  for (i = 0x10; i < 0x40; i += 4) draw_char (video_ram[i], video_ram[i + 1], video_ram[i + 2], video_ram[i + 3]);
 
   /* draw quads, position mapping happens in ext_write (vmachine.c) */
   for (i = 0x40; i < 0x80; i += 0x10)
-    draw_quad (VDCwrite[i], VDCwrite[i + 1], VDCwrite[i + 2], VDCwrite[i + 3], VDCwrite[i + 6], VDCwrite[i + 7], VDCwrite[i + 10], VDCwrite[i + 11], VDCwrite[i + 14], VDCwrite[i + 15]);
+    draw_quad (video_ram[i], video_ram[i + 1], video_ram[i + 2], video_ram[i + 3], video_ram[i + 6], video_ram[i + 7], video_ram[i + 10], video_ram[i + 11], video_ram[i + 14], video_ram[i + 15]);
 
   /* draw sprites */
   c = 8;			/* what is 8 */
   for (i = 12; i >= 0; i -= 4)
     {
       pnt2 = 0x80 + (i * 2);
-      y = VDCwrite[i];
-      x = VDCwrite[i + 1] - 8;	/* This registers holds the 8 highest bits of the X position. */
-      t = VDCwrite[i + 2];
+      y = video_ram[i];
+      x = video_ram[i + 1] - 8;	/* This registers holds the 8 highest bits of the X position. */
+      t = video_ram[i + 2];
       cl = ((t & 0x38) >> 3);	/* 0x38 is 111000 */
       cl = ((cl & 2) | ((cl & 1) << 2) | ((cl & 4) >> 2)) + 8;
       /*174 */
@@ -355,7 +262,7 @@ void draw_display ()
 		{
 		  for (j = 0; j < 8; j++)
 		    {
-		      sm = (((j % 2 == 0) && (((t >> 1) & 1) != (t & 1))) || ((j % 2 == 1) && (t & 1))) ? 1 : 0; d1 = VDCwrite[pnt2++];
+		      sm = (((j % 2 == 0) && (((t >> 1) & 1) != (t & 1))) || ((j % 2 == 1) && (t & 1))) ? 1 : 0; d1 = video_ram[pnt2++];
 		      for (b = 0; b < 8; b++)
 			{
 			  if (d1 & 0x01)
@@ -383,7 +290,7 @@ void draw_display ()
 		  for (j = 0; j < 8; j++)
 		    {
 		      sm = (((j % 2 == 0) && (((t >> 1) & 1) != (t & 1))) || ((j % 2 == 1) && (t & 1))) ? 1 : 0;
-		      d1 = VDCwrite[pnt2++];
+		      d1 = video_ram[pnt2++];
 		      for (b = 0; b < 8; b++)
 			{
 			  if (d1 & 0x01)
@@ -406,11 +313,6 @@ void draw_display ()
     }
 }
 
-
-/*
- * chr = This register holds the lowest 8 bits of the charset pointer.
- * col bit 0 = This is bit 8 of the charset pointer, the highest bit.
- * */
 void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col)
 {
   int j, c;
@@ -431,7 +333,7 @@ void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col)
       if (col & 0x01) c += 256;
       if (c > 511) c -= 512;
 
-      cl = ((col & 0x0E) >> 1);	/* mask 1110 = get only bit 1,2,3 (color bits) */
+      cl = ((col & 0x0E) >> 1);
       cl = ((cl & 2) | ((cl & 1) << 2) | ((cl & 4) >> 2)) + 8;
 
       if ((y > 0) && (y < 232) && (xpos < 157))
@@ -445,8 +347,8 @@ void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col)
 		    {
 		      if ((xpos - 8 + b < 160) && (y + j < 240))
 			{
-			  mputvid (pnt, 2, cl, COL_CHAR);
-			  mputvid (pnt + BMPW, 2, cl, COL_CHAR);
+			  mputvid (pnt, 2, cl, COLLISION_CHAR);
+			  mputvid (pnt + BMPW, 2, cl, COLLISION_CHAR);
 			}
 		    }
 		  pnt += 2;
@@ -458,90 +360,68 @@ void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col)
     }
 }
 
-/* This quad drawing routine can display the quad cut off effect used in KTAA.
- * It needs more testing with other games, especially the clipping.
- * This code is quite slow and needs a rewrite by somebody with more experience
- * than I (sgust) have */
-
 void draw_quad (uint8_t ypos, uint8_t xpos, uint8_t cp0l, uint8_t cp0h, uint8_t cp1l, uint8_t cp1h, uint8_t cp2l, uint8_t cp2h, uint8_t cp3l, uint8_t cp3h)
 {
-  /* char set pointers */
-  int chp[4];
-  /* colors */
+  uint8_t chp[4];
   uint8_t col[4];
-  /* pointer into screen bitmap */
-  unsigned int pnt;
-  /* offset into current line */
-  unsigned int off;
-  /* loop variables */
-  int i, j, lines;
+  uint8_t lines;
+  uint16_t pnt;
+  uint16_t offset;
 
-  /* get screen bitmap position of quad */
-  pnt = (ypos & 0xfe) * BMPW + ((xpos - 8) * 2) + 20;
-  /* abort drawing if completely below the bottom clip */
-  if (pnt > (unsigned long) clip_high) return;
-  /* extract and convert char-set offsets */
-  chp[0] = cp0l | ((cp0h & 1) << 8);
-  chp[1] = cp1l | ((cp1h & 1) << 8);
-  chp[2] = cp2l | ((cp2h & 1) << 8);
-  chp[3] = cp3l | ((cp3h & 1) << 8);
-  for (i = 0; i < 4; i++) chp[i] = (chp[i] + (ypos >> 1)) & 0x1ff;
+  pnt = (ypos & 0xFE) * BMPW + ((xpos - 8) * 2) + 20;
+  if (pnt > (uint16_t) clip_high) return;
+
+  chp[0] = cp0l | ((cp0h & 0x01) << 8);
+  chp[1] = cp1l | ((cp1h & 0x01) << 8);
+  chp[2] = cp2l | ((cp2h & 0x01) << 8);
+  chp[3] = cp3l | ((cp3h & 0x01) << 8);
+
+  for (int i = 0; i < 4; i++) chp[i] = (chp[i] + (ypos >> 1)) & 0x1FF;
+
   lines = 8 - (chp[3] + 1) % 8;
-  /* abort drawing if completely over the top clip */
-  if (pnt + BMPW * 2 * lines < (unsigned long) clip_low) return;
-  /* extract and convert color information */
-  col[0] = (cp0h & 0xe) >> 1;
-  col[1] = (cp1h & 0xe) >> 1;
-  col[2] = (cp2h & 0xe) >> 1;
-  col[3] = (cp3h & 0xe) >> 1;
-  for (i = 0; i < 4; i++) col[i] = ((col[i] & 2) | ((col[i] & 1) << 2) | ((col[i] & 4) >> 2)) + 8;
-  /* now draw the quad line by line controlled by the last quad */
+  if (pnt + BMPW * 2 * lines < (uint16_t) clip_low) return;
+
+  /*
+  col[0] = (cp0h & 0x0E) >> 1;
+  col[1] = (cp1h & 0x0E) >> 1;
+  col[2] = (cp2h & 0x0E) >> 1;
+  col[3] = (cp3h & 0x0E) >> 1;
+  */
+
+  // for (int i = 0; i < 4; i++) col[i] = ((col[i] & 2) | ((col[i] & 1) << 2) | ((col[i] & 4) >> 2)) + 8;
+
   while (lines-- > 0)
     {
-      off = 0;
-      /* draw all 4 sub-quads */
-      for (i = 0; i < 4; i++)
+      offset = 0;
+      for (int i = 0; i < 4; i++)
 	{
-	  /* draw sub-quad pixel by pixel, but stay in same line */
-	  for (j = 0; j < 8; j++)
+	  for (int j = 0; j < 8; j++)
 	    {
-	      if ((cset[chp[i]] & (1 << (7 - j))) && (off < BMPW))
+	      if ((cset[chp[i]] & (0x01 << (7 - j))) && (offset < BMPW))
 		{
-		  mputvid (pnt + off, 2, col[i], COL_CHAR);
-		  mputvid (pnt + off + BMPW, 2, col[i], COL_CHAR);
+		  // mputvid (pnt + offset       , 2, col[i], COLLISION_CHAR);
+		  // mputvid (pnt + offset + BMPW, 2, col[i], COLLISION_CHAR);
 		}
-	      /* next pixel */
-	      off += 2;
+	      offset += 2;
 	    }
-	  /* space between sub-quads */
-	  off += 16;
+	  offset += 16;
 	}
-      /* advance char-set pointers */
-      for (i = 0; i < 4; i++) chp[i] = (chp[i] + 1) & 0x1ff;
-      /* advance screen bitmap pointer */
+      for (int i = 0; i < 4; i++) chp[i] = (chp[i] + 1) & 0x1FF;
       pnt += BMPW * 2;
     }
 }
 
 int init_display ()
 {
-  get_palette (oldcol);
-  create_cmap ();
-  if (BMPW * BMPH == 0) o2em_clean_quit (EXIT_FAILURE);
   bmp = create_bitmap (BMPW, BMPH);
   if (bmp == NULL) return -1;
   bmpcache = create_bitmap (BMPW, BMPH);
   if (bmpcache == NULL) return -1;
-#ifndef __O2EM_SDL__
-  vscreen = (uint8_t *) bmp->dat;
-#else
-  vscreen = (uint8_t *) bmp->pixels;
-#endif
+  vscreen = (uint8_t *) BMPH;
   clear_screen(bmp);
   clear_screen(bmpcache);
 
-  col = (uint8_t *) malloc (BMPW * BMPH);
-  if (col == NULL) o2em_clean_quit (EXIT_FAILURE);
-  memset (col, 0, BMPW * BMPH);
+  // col = (uint8_t *) malloc (BMPW * BMPH);
+  // memset (col, 0, BMPW * BMPH);
   return 0;
 }

@@ -1,6 +1,8 @@
 #ifndef ARDUIPAC_8048_H
 #define ARDUIPAC_8048_H
 
+#define ROM(addr) (rom[(addr) & 0xFFF])
+
 extern uint8_t itimer;
 extern uint8_t timer_on;
 extern uint8_t count_on;

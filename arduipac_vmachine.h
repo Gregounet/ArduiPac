@@ -17,12 +17,9 @@ extern int master_clk;
 extern int int_clk;
 extern int horizontal_clock;
 extern uint8_t collision_table[256];
-extern uint8_e mstate;
+extern uint8_t mstate;
 
-extern uint8_t external_ram[];
-extern uint8_t external_rom[];
-extern uint8_t VDCwrite[256];
-extern uint8_t ColorVector[MAXLINES];
+extern uint8_t intel8245_ram[];
 
 extern int frame;
 extern unsigned long clk_counter;
@@ -33,8 +30,8 @@ extern int pendirq;
 extern int sprite_offset;
 
 uint8_t read_P2 ();
-void ext_write (uint8_t dat, uint16_t addr);
-uint8_t ext_read (uint16_t addr);
+void ext_write (uint8_t dat, uint8_t addr);
+uint8_t ext_read (uint8_t addr);
 void handle_vbl ();
 void handle_evbl ();
 void handle_evbll ();

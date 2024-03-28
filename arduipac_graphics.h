@@ -4,7 +4,7 @@
 #define SCREEN_W 256
 #define SCREEN_H 192
 
-uint8_t *screen;
+extern uint8_t *screen;
 
 uint8_t *create_bitmap (int w, int h);
 void clear_bitmap (uint8_t * bitmap);

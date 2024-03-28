@@ -3,13 +3,13 @@
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
 #include "arduipac_vmachine.h"
+#include "c52_alien_invaders_usa_eu.h"
 
 #define push(d) {internal_ram[sp++] = (d); if (sp > 23) sp = 8;}
 #define pull() (sp--, (sp < 8)?(sp=23):0, internal_ram[sp])
 #define make_psw() {psw = (cy << 7) | ac | f0 | bs | 0x08; psw = psw | ((sp - 8) >> 1);}
 #define illegal(i) {}
 #define undef(i) {}
-#define ROM(addr) (external_rom[(addr) & 0xFFF])
 
 uint8_t internal_ram[64];
 
@@ -1432,8 +1432,8 @@ void exec_8048 ()
 
       if (horizontal_clock > LINECNT - 1)
 	{
-	  dhorizontal_clock -= LINECNT;
-	  if (enahirq && (VDCwrite[0xA0] & 0x01)) ext_irq ();
+	  horizontal_clock -= LINECNT;
+	  if (enahirq && (intel8245_ram[0xA0] & 0x01)) ext_irq ();
 	  if (count_on && mstate == 0)
 	    {
 	      itimer++;
