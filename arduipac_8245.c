@@ -22,7 +22,7 @@
 static int cached_lines[MAXLINES];
 
 uint8_t collision_table[256];
-uint8_t video_ram[256];
+uint8_t intel8245_ram[256];
 
 long clip_low;
 long clip_high;
@@ -92,7 +92,7 @@ static void draw_grid ()
   int j, i, x, w;
   uint8_t color;
 
-  if (video_ram[0xA0] & 0x40)
+  if (intel8245_ram[0xA0] & 0x40)
   {
       for (j = 0; j < 9; j++)
       {
@@ -118,10 +118,10 @@ static void draw_grid ()
 	  pn1 = pnt + (i * 32) + 20;
 	  if ((pn1 + BMPW * 3 >= (unsigned long) clip_low) && (pn1 <= (unsigned long) clip_high))
 	  {
-	      d = video_ram[0xC0 + i];
+	      d = intel8245_ram[0xC0 + i];
 	      if (j == 8)
 	      {
-		 d = video_ram[0xD0 + i];
+		 d = intel8245_ram[0xD0 + i];
 		 mask = 1;
 	      }
 	      if (d & mask)
@@ -137,12 +137,12 @@ static void draw_grid ()
 
   mask = 0x01;
   w = 4;
-  if (video_ram[0xA0] & 0x80) w = 32;
+  if (intel8245_ram[0xA0] & 0x80) w = 32;
   for (j = 0; j < 10; j++)
     {
       pnt = (j * 32);
       mask = 0x01;
-      d = video_ram[0xE0 + j];
+      d = intel8245_ram[0xE0 + j];
       for (x = 0; x < 8; x++)
 	{
 	  pn1 = pnt + (((x * 24) + 24) * BMPW) + 20;
@@ -227,50 +227,56 @@ void clear_collision ()
 
 void draw_display ()
 {
-  int i, j, x, sm, t;
-  uint8_t y, b, d1, cl, c;
+  int x;
+  int sm;
+  int t;
+  uint8_t d1;
+  uint8_t y;
+  uint8_t cl;
+  uint8_t c;
 
-  unsigned int pnt, pnt2;
+  unsigned int pnt;
+  unsigned int pnt2;
 
-  for (i = clip_low / BMPW; i < clip_high / BMPW; i++) memset (vscreen + i * BMPW,  0x38 >> 3, BMPW);
+  for (int i = clip_low / BMPW; i < clip_high / BMPW; i++) memset (vscreen + i * BMPW,  0x38 >> 3, BMPW);
 
-  if (video_ram[0xA0] & 0x08) draw_grid ();
-  for (i = 0x10; i < 0x40; i += 4) draw_char (video_ram[i], video_ram[i + 1], video_ram[i + 2], video_ram[i + 3]);
+  if (intel8245_ram[0xA0] & 0x08) draw_grid ();
+  for (int i = 0x10; i < 0x40; i += 4) draw_char (intel8245_ram[i], intel8245_ram[i + 1], intel8245_ram[i + 2], intel8245_ram[i + 3]);
 
-  /* draw quads, position mapping happens in ext_write (vmachine.c) */
-  for (i = 0x40; i < 0x80; i += 0x10)
-    draw_quad (video_ram[i], video_ram[i + 1], video_ram[i + 2], video_ram[i + 3], video_ram[i + 6], video_ram[i + 7], video_ram[i + 10], video_ram[i + 11], video_ram[i + 14], video_ram[i + 15]);
+  for (int i = 0x40; i < 0x80; i += 0x10)
+    draw_quad (intel8245_ram[i], intel8245_ram[i + 1], intel8245_ram[i + 2], intel8245_ram[i + 3], intel8245_ram[i + 6], intel8245_ram[i + 7],
+		    intel8245_ram[i + 10], intel8245_ram[i + 11], intel8245_ram[i + 14], intel8245_ram[i + 15]);
 
-  /* draw sprites */
-  c = 8;			/* what is 8 */
-  for (i = 12; i >= 0; i -= 4)
+  c = 8;
+  for (int i = 12; i >= 0; i -= 4)
     {
       pnt2 = 0x80 + (i * 2);
-      y = video_ram[i];
-      x = video_ram[i + 1] - 8;	/* This registers holds the 8 highest bits of the X position. */
-      t = video_ram[i + 2];
-      cl = ((t & 0x38) >> 3);	/* 0x38 is 111000 */
+
+      y = intel8245_ram[i];
+      x = intel8245_ram[i + 1] - 8;
+      t = intel8245_ram[i + 2];
+
+      cl = ((t & 0x38) >> 3);
       cl = ((cl & 2) | ((cl & 1) << 2) | ((cl & 4) >> 2)) + 8;
-      /*174 */
+
       if ((x < 164) && (y > 0) && (y < 232))
-	{			/*TODO why 164 0 and 232 ? */
-	  pnt = y * BMPW + (x * 2) + 20 + sprite_offset;
+	{
+	  pnt = y * BMPW + (x * 2) + 20;
 	  if (t & 4)
-	    {			/*bit 2 If this bit is 1 the size of the sprite doubles */
-	      if ((pnt + BMPW * 32 >= (unsigned long) clip_low)
-		  && (pnt <= (unsigned long) clip_high))
+	    {		
+	      if ((pnt + BMPW * 32 >= (unsigned long) clip_low) && (pnt <= (unsigned long) clip_high))
 		{
-		  for (j = 0; j < 8; j++)
+		  for (int j = 0; j < 8; j++)
 		    {
-		      sm = (((j % 2 == 0) && (((t >> 1) & 1) != (t & 1))) || ((j % 2 == 1) && (t & 1))) ? 1 : 0; d1 = video_ram[pnt2++];
-		      for (b = 0; b < 8; b++)
+		      sm = (((j % 2 == 0) && (((t >> 1) & 1) != (t & 1))) || ((j % 2 == 1) && (t & 1))) ? 1 : 0; d1 = intel8245_ram[pnt2++];
+		      for (int b = 0; b < 8; b++)
 			{
 			  if (d1 & 0x01)
 			    {
 			      if ((x + b + sm < 159) && (y + j < 247))
 				{
-				  mputvid (sm + pnt, 4, cl, c);
-				  mputvid (sm + pnt + BMPW, 4, cl, c);
+				  mputvid (sm + pnt           , 4, cl, c);
+				  mputvid (sm + pnt +     BMPW, 4, cl, c);
 				  mputvid (sm + pnt + 2 * BMPW, 4, cl, c);
 				  mputvid (sm + pnt + 3 * BMPW, 4, cl, c);
 				}
@@ -283,21 +289,20 @@ void draw_display ()
 		}
 	    }
 	  else
-	    {			/* bit 2 is 0 normal sprite size */
-	      if ((pnt + BMPW * 16 >= (unsigned long) clip_low)
-		  && (pnt <= (unsigned long) clip_high))
+	    {
+	      if ((pnt + BMPW * 16 >= (unsigned long) clip_low) && (pnt <= (unsigned long) clip_high))
 		{
-		  for (j = 0; j < 8; j++)
+		  for (int j = 0; j < 8; j++)
 		    {
 		      sm = (((j % 2 == 0) && (((t >> 1) & 1) != (t & 1))) || ((j % 2 == 1) && (t & 1))) ? 1 : 0;
-		      d1 = video_ram[pnt2++];
-		      for (b = 0; b < 8; b++)
+		      d1 = intel8245_ram[pnt2++];
+		      for (int b = 0; b < 8; b++)
 			{
 			  if (d1 & 0x01)
 			    {
 			      if ((x + b + sm < 160) && (y + j < 249))
 				{
-				  mputvid (sm + pnt, 2, cl, c);
+				  mputvid (sm + pnt       , 2, cl, c);
 				  mputvid (sm + pnt + BMPW, 2, cl, c);
 				}
 			    }
@@ -315,16 +320,18 @@ void draw_display ()
 
 void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col)
 {
-  int j, c;
-  uint8_t cl, d1;
-  int y, b, n;
+  int c;
+  uint8_t cl;
+  uint8_t d1;
+  uint8_t y;
+  int n;
   unsigned int pnt;
 
   y = (ypos & 0xFE);
   pnt = y * BMPW + ((xpos - 8) * 2) + 20;
 
   ypos = ypos >> 1;
-  n = 8 - (ypos % 8) - (chr % 8);
+  n = 8 - (ypos % 0x08) - (chr % 0x08);
   if (n < 3) n = n + 7;
 
   if ((pnt + BMPW * 2 * n >= (unsigned long) clip_low) && (pnt <= (unsigned long) clip_high))
@@ -334,20 +341,20 @@ void draw_char (uint8_t ypos, uint8_t xpos, uint8_t chr, uint8_t col)
       if (c > 511) c -= 512;
 
       cl = ((col & 0x0E) >> 1);
-      cl = ((cl & 2) | ((cl & 1) << 2) | ((cl & 4) >> 2)) + 8;
+      cl = ((cl & 0x02) | ((cl & 0x01) << 2) | ((cl & 0x04) >> 2)) + 8;
 
       if ((y > 0) && (y < 232) && (xpos < 157))
 	{
-	  for (j = 0; j < n; j++)
+	  for (int j = 0; j < n; j++)
 	    {
 	      d1 = cset[c + j];
-	      for (b = 0; b < 8; b++)
+	      for (int b = 0; b < 8; b++)
 		{
 		  if (d1 & 0x80)
 		    {
 		      if ((xpos - 8 + b < 160) && (y + j < 240))
 			{
-			  mputvid (pnt, 2, cl, COLLISION_CHAR);
+			  mputvid (pnt,        2, cl, COLLISION_CHAR);
 			  mputvid (pnt + BMPW, 2, cl, COLLISION_CHAR);
 			}
 		    }
@@ -413,13 +420,13 @@ void draw_quad (uint8_t ypos, uint8_t xpos, uint8_t cp0l, uint8_t cp0h, uint8_t 
 
 int init_display ()
 {
-  bmp = create_bitmap (BMPW, BMPH);
-  if (bmp == NULL) return -1;
+  bmp      = create_bitmap (BMPW, BMPH);
   bmpcache = create_bitmap (BMPW, BMPH);
-  if (bmpcache == NULL) return -1;
-  vscreen = (uint8_t *) BMPH;
+
   clear_screen(bmp);
   clear_screen(bmpcache);
+
+  // vscreen = (uint8_t *) BMPH; TODO: trop con cette ligne
 
   // col = (uint8_t *) malloc (BMPW * BMPH);
   // memset (col, 0, BMPW * BMPH);

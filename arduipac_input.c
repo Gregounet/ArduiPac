@@ -8,7 +8,7 @@ void write_p1 (uint8_t data)
   p1 = data;
 }
 
-uint8_t read_P2 ()
+uint8_t read_p2 ()
 {
   int i;
   int si;

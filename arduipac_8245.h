@@ -16,7 +16,7 @@
 #define DISPLAY_HEIGHT 240
 
 extern uint8_t collision_table[];
-extern uint8_t video_ram[];
+extern uint8_t intel8245_ram[];
 
 extern uint8_t *col;
 

@@ -22,14 +22,11 @@ extern uint8_t mstate;
 extern uint8_t intel8245_ram[];
 
 extern int frame;
-extern unsigned long clk_counter;
 
-extern int enahirq;
-extern int pendirq;
+extern uint8_t enahirq;
+extern uint8_t pendirq;
 
-extern int sprite_offset;
-
-uint8_t read_P2 ();
+uint8_t read_p2 ();
 void ext_write (uint8_t dat, uint8_t addr);
 uint8_t ext_read (uint8_t addr);
 void handle_vbl ();
