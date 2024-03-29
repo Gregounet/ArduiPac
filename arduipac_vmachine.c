@@ -1,6 +1,5 @@
-// #include <stdlib.h>
 #include <stdint.h>
-
+#include <stdio.h>
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
 #include "arduipac_timefunc.h"
@@ -8,38 +7,40 @@
 #include "arduipac_graphics.h"
 #include "c52_alien_invaders_usa_eu.h"
 
+#define FPS 60
+
 static uint8_t x_latch, y_latch;
 static uint8_t romlatch = 0;
 static uint8_t line_count;
-static uint8_t fps = 60;
-
-int evblclk;
-int int_clk;
-int master_clk;
-int horizontal_clock;
-
+uint32_t evblclk;
+uint32_t int_clk;
+uint32_t master_clk;
+uint32_t horizontal_clock;
 uint8_t mstate;
-
 uint8_t pendirq = 0;
 uint8_t enahirq = 1;
 
 void init_system ()
 {
-  mstate = 0;
+	fprintf(stderr,"Entering init_system()\n");
   master_clk = 0;
   horizontal_clock = 0;
+  mstate = 0;
   line_count = 0;
-  itimer = 0;
 
-  for (uint8_t i = 0; i < 256; i++) intel8245_ram[i] = 0;
+	fprintf(stderr," Initializing intel8245_ram\n");
+  for (uint8_t i = 0x00 ; i < 0xFF ; i++) intel8245_ram[i] = 0x00;
+	fprintf(stderr," Launching clear_collision()\n");
   clear_collision ();
 }
 
 void handle_vbl ()
 {
+	//fprintf(stderr,"Entering handle_vbl()\n");
   draw_region ();
   ext_irq ();
   mstate = 1;
+	////fprintf(stderr,"Leaving handle_vbl()\n");
 }
 
 void handle_evbl ()
@@ -66,46 +67,20 @@ void handle_evbl ()
     }
   */
 
-  delay = TICKSPERSEC / fps; // Ticks par frame = délai entre deux trames en ticks
+  /* TODO Qué merdier !
+  delay = TICKSPERSEC / FPS; // Ticks par frame = délai entre deux trames en ticks
   f = ((delay + last - gettimeticks ()) * 1000) / TICKSPERSEC;
   antiloop = 0;
   idx++;
   if (first == 0) first = gettimeticks () - 1;
   tick_tmp = gettimeticks ();
-  if (idx * TICKSPERSEC / (tick_tmp - first) < fps) delay = 0;
+  if (idx * TICKSPERSEC / (tick_tmp - first) < FPS) delay = 0;
   while (gettimeticks () - last < delay && antiloop < 1000000) antiloop++;
   last = gettimeticks ();
   // En gros tout cela constiture une tempo
 
   mstate = 0;
-}
-
-void handle_evbll ()
-{
-  static unsigned long last = 0;
-  static int rest_cnt = 0;
-  unsigned long delay;
-  unsigned long f;
-  int antiloop = 0;
-  rest_cnt = (rest_cnt + 1) % 15;
-
-  /*
-  if (key2vcnt++ > 10)
-    {
-      key2vcnt = 0;
-      for (i = 0; i < KEY_MAX; i++)
-	key2[i] = 0;
-      dbstick1 = dbstick2 = 0;
-    }
   */
-
-  delay = TICKSPERSEC / fps;
-  f = ((delay + last - gettimeticks ()) * 1000) / TICKSPERSEC;
-  antiloop = 0;
-  while (gettimeticks () - last < delay && antiloop < 1000000) antiloop++;
-  last = gettimeticks ();
-
-  mstate = 0;
 }
 
 uint8_t read_t1 ()

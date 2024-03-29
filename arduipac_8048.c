@@ -1,8 +1,11 @@
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
 #include "arduipac_vmachine.h"
 #include "c52_alien_invaders_usa_eu.h"
+#include "mnemonics.h"
 
 #define push(d) {internal_ram[sp++] = (d); if (sp > 23) sp = 8;}
 #define pull() (sp--, (sp < 8)?(sp=23):0, internal_ram[sp])
@@ -26,8 +29,8 @@ uint8_t xirq_pend;   // External Interrupt Pending
 uint8_t tirq_pend;   // Timer Interrupt Pending
 uint8_t itimer;      // Internal Timer Value
 uint8_t timer_on;    // Timer is On
-uint8_t t_flag;      // Timer Flag
 uint8_t count_on;    // Counter is On
+uint8_t t_flag;      // Timer Flag
 uint8_t xirq_en;     // External Interupt Enabled
 uint8_t tirq_en;     // Timer Interupt Enabled
 uint8_t irq_ex;	     // ISR executing
@@ -42,6 +45,7 @@ void init_8048 ()
   pc         = 0x000;
   a11        = 0x000;
   a11_backup = 0x000;
+
   sp = 0x08;
   p1 = 0xFF;
   p2 = 0xFF;
@@ -51,6 +55,8 @@ void init_8048 ()
   cy = 0x00;
   f0 = 0x00;
   f1 = 0x00;
+
+  itimer = 0x00;
   timer_on = 0;
   count_on = 0;
   tirq_en = 0;
@@ -87,7 +93,7 @@ void timer_irq ()
       make_psw ();
       push (pc & 0xFF);
       push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-      pc = 0x07; // 0x007 = Timer Interupt Service Routine Vector
+      pc = 0x07;   // 0x007 = Timer Interupt Service Routine Vector
       a11_backup = a11;
       a11 = 0x000; // ISR always located in ROM Bank 0
       clk = 2;
@@ -97,6 +103,8 @@ void timer_irq ()
 
 void exec_8048 ()
 {
+  fprintf(stderr, "Entering exec_8048()\n");
+  fprintf(stderr, "PC = 0x%03X\n",pc);
   uint8_t acc;   // Accumulator
   uint8_t op;    // Op-code
   uint16_t addr; // Address
@@ -106,7 +114,27 @@ void exec_8048 ()
   for (;;)
     {
       clk = 1;
-      op = ROM (pc++);
+      //op = ROM (pc++);
+      op = ROM (pc);
+
+      //fprintf(stderr, "0x%03X\t0x%02X\n",pc,op);
+      //fprintf(stderr, "0x%03X\t0x%02X\t%s\n",pc,op,lookup[op].mnemonic);
+      //fprintf(stderr, "ACC: 0x%02X\tCY: %d\tPC: 0x%03X\tOP: 0x%02X\t%s\n",acc,cy,pc,op,lookup[op].mnemonic);
+      fprintf(stderr, "ACC: 0x%02X\tCY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\tPC: 0x%03X\tOP: 0x%02X\t%s\n",
+		      acc,
+		      cy,
+		      internal_ram[reg_pnt],
+		      internal_ram[reg_pnt+1],
+		      internal_ram[reg_pnt+2],
+		      internal_ram[reg_pnt+3],
+		      internal_ram[reg_pnt+4],
+		      internal_ram[reg_pnt+5],
+		      internal_ram[reg_pnt+6],
+		      internal_ram[reg_pnt+7],
+		      pc,
+		      op,
+		      lookup[op].mnemonic);
+      pc++;
 
       switch (op)
 	{
@@ -219,6 +247,7 @@ void exec_8048 ()
 		  case 0x0A4: pc |= 0x500; break;
 		  case 0x0C4: pc |= 0x600; break;
 		  case 0x0E4: pc |= 0x700; break;
+                  // ALTERNATE: pc |= (uint16_t (op & 0xE0)) << 8;
 	  }
 	  clk = 2;
 	  break;
@@ -258,6 +287,7 @@ void exec_8048 ()
 	case 0xD2:		/* JBb address */
 	case 0xF2:		/* JBb address */
 	  data = ROM (pc);
+	  // ALTERNATE: if (acc & (0x01 << ((op - 0x12) / 0x20)) pc = (pc & 0xF00) | data);
 	  uint8_t test_bit = 0x01 << ((op - 0x12) / 0x20);
 	  if (acc & test_bit) pc = (pc & 0xF00) | data;
 	  else pc++;
@@ -278,13 +308,14 @@ void exec_8048 ()
 	case 0x1D:		/* INC Rr */
 	case 0x1E:		/* INC Rr */
 	case 0x1F:		/* INC Rr */
+	  fprintf(stderr,"INC R%d\n",(op-0x18));
 	  internal_ram[reg_pnt + (op - 0x18)]++;
 	  break;
 	case 0x20:		/* XCH A,@Ri */
 	case 0x21:		/* XCH A,@Ri */
-	  data = acc;
-	  acc                                              = internal_ram[internal_ram[reg_pnt + (op - 0x20)]];
-	  internal_ram[internal_ram[reg_pnt + (op -0x20)]] = data;
+	  data                                              = acc;
+	  acc                                               = internal_ram[internal_ram[reg_pnt + (op - 0x20)]];
+	  internal_ram[internal_ram[reg_pnt + (op - 0x20)]] = data;
 	case 0x23:		/* MOV a,#data */
 	  acc = ROM (pc++);
 	  clk = 2;
@@ -301,7 +332,7 @@ void exec_8048 ()
 	  clk = 2;
 	  break;
 	case 0x36:		/* JT0 */
-	  data = ROM (pc);
+	  // data = ROM (pc);
 	  // if (get_voice_status ()) pc = (pc & 0xF00) | data;
 	  // else pc++;
 	  pc++;
@@ -638,6 +669,7 @@ void exec_8048 ()
 	      reg_pnt = 0x18;
 	      break;
 	  }
+	  // ALTERNATE: bs = op & 0x10 ; reg_pnt = op | (op >> 1);
 	  break;
 	case 0xC6:		/* JZ address */
 	  data = ROM (pc);
@@ -738,6 +770,7 @@ void exec_8048 ()
 	  pc++;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
+	  // begin block
 	  addr = ROM (pc) | a11;
 	  switch(op) {
 		  case 0x34: addr |= 0x100; break; 
@@ -748,6 +781,10 @@ void exec_8048 ()
 		  case 0xC4: addr |= 0x600; break; 
 		  case 0xE4: addr |= 0x700; break; 
 	  }
+	  // end block
+	  // ALTERNATE (pour tout le bloc ci-dessus):
+	  // addr = a11 | ((uint16_t)(op & 0xE0)) << 3 ROM(pc) ;
+	  //
 	  pc = addr;
 	  clk = 2;
 	  break;
@@ -765,6 +802,7 @@ void exec_8048 ()
 
       master_clk += clk;
       horizontal_clock += clk;
+      
 
       if (int_clk > clk) int_clk -= clk;
       else int_clk = 0;
@@ -776,7 +814,7 @@ void exec_8048 ()
 	  horizontal_clock -= LINECNT;
 	  if (enahirq && (intel8245_ram[0xA0] & 0x01)) ext_irq ();
 	  if (count_on && mstate == 0) {
-	      itimer++;
+	      itimer++; // TODO pourquoi incrémenter itimer ici ?
 	      if (itimer == 0x00) {
 		  t_flag = 1;
 		  timer_irq ();
@@ -787,7 +825,7 @@ void exec_8048 ()
 
       if (timer_on) {
 	  master_count += clk;
-	  if (master_count > 31) {
+	  if (master_count > 31) { // TODO WTf ce 31 ? Ca divise la clock par 32...
 	      master_count -= 31;
 	      itimer++;
 	      if (itimer == 0x00) {
@@ -801,7 +839,7 @@ void exec_8048 ()
 
       if ((mstate == 1) && (master_clk > evblclk)) {
 	  handle_evbl ();
-	  break;
 	}
+
     }
 }

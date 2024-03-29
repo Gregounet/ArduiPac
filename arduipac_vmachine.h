@@ -11,18 +11,13 @@
 #define VBLCLK 5493
 #define EVBLCLK_PAL 7259
 
-extern int evblclk;
-
-extern int master_clk;
-extern int int_clk;
-extern int horizontal_clock;
+extern uint32_t evblclk;
+extern uint32_t master_clk;
+extern uint32_t int_clk;
+extern uint32_t horizontal_clock;
 extern uint8_t collision_table[256];
 extern uint8_t mstate;
-
 extern uint8_t intel8245_ram[];
-
-extern int frame;
-
 extern uint8_t enahirq;
 extern uint8_t pendirq;
 

@@ -113,7 +113,7 @@ void mputvid (uint32_t location, uint16_t len, uint8_t color, uint16_t c)
 	}
       else {
 	  for (uint16_t i = 0; i < len; i++) {
-	      vscreen[location] = color;
+	      //vscreen[location] = color;
 	      //col[ad] |= c;
 	      //collision_table[c] |= collision[ad++];
 	    }
@@ -195,10 +195,10 @@ unsigned char * get_raw_pixel_line (BITMAP * pSurface, int y)
 
 void finish_display ()
 {
-  int x, y, sn;
+  int x, y;
+  int sn;
   static int cache_counter = 0;
-  static long index = 0;
-  static unsigned long fps_last = 0, t = 0, curr = 0;
+  static unsigned long t = 0, curr = 0;
 
   for (y = 0; y < BITMAP_HEIGHT; y++)
       cached_lines[y] = !memcmp (get_raw_pixel_line (bmpcache, y), get_raw_pixel_line (bmp, y), BITMAP_HEIGHT);
@@ -207,27 +207,15 @@ void finish_display ()
   for (y = 0; y < 10; y++) cached_lines[(y + cache_counter) % BITMAP_HEIGHT] = 0;
   cache_counter = (cache_counter + 10) % BITMAP_HEIGHT;
 
-  /*
-  for (y = 0; y < WNDH; y++)
-      if (!cached_lines[y + 2]) stretch_blit (bmp, screen, 7, 2 + y, WNDW, 1, 0, y,  WNDW , wsize - sn);
-      */
-
   if (sn) {
       for (y = 0 ; y < BITMAP_HEIGHT ; y++) {
 	  if (!cached_lines[y + 2]) {
 	      for (x = 0; x < BITMAP_WIDTH; x++) *get_raw_pixel (bmp, x, y + 2) += 16;
-	      //stretch_blit (bmp, screen, 7, 2 + y, WNDW, 1, 0, (y + 1) - 1, WNDW , 1);
 	      memcpy (get_raw_pixel_line (bmp, y + 2), get_raw_pixel_line (bmpcache, y + 2), BITMAP_HEIGHT);
 	    }
 	}
     }
   clear_screen(screen);
-  /*
-  dest_rect.x = 0;
-  dest_rect.y = 0;
-  dest_rect.w = WNDW;
-  dest_rect.h = WNDH;
-  */
 }
 
 void clear_screen(uint8_t *bitmap)
@@ -259,7 +247,7 @@ void draw_display ()
   unsigned int pnt;
   unsigned int pnt2;
 
-  for (int i = clip_low / BITMAP_WIDTH; i < clip_high / BITMAP_WIDTH; i++) memset (vscreen + i * BITMAP_WIDTH,  0x0E, BITMAP_WIDTH);
+  //for (int i = clip_low / BITMAP_WIDTH; i < clip_high / BITMAP_WIDTH; i++) memset (vscreen + i * BITMAP_WIDTH,  0x0E, BITMAP_WIDTH);
 
   if (intel8245_ram[0xA0] & 0x08) draw_grid ();
 
