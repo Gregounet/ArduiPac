@@ -6,12 +6,6 @@
 #define BITMAP_WIDTH  340
 #define BITMAP_HEIGHT 250
 
-#define WNDW 320
-#define WNDH 240
-
-#define BMPW 320
-#define BMPH 240
-
 #define DISPLAY_WIDTH  320
 #define DISPLAY_HEIGHT 240
 

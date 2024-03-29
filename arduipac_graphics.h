@@ -1,9 +1,6 @@
 #ifndef ARDUIPAC_GRAPHICS_H
 #define ARDUIPAC_GRAPHICS_H
 
-#define SCREEN_W 256
-#define SCREEN_H 192
-
 extern uint8_t *screen;
 
 uint8_t *create_bitmap (int w, int h);
