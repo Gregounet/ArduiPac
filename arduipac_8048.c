@@ -238,17 +238,7 @@ void exec_8048 ()
 	case 0xC4:		/* JMP */
 	case 0xE4:		/* JMP */
 	  pc = ROM (pc) | a11;
-	  switch (op)
-	  {
-		  case 0x024: pc |= 0x100; break;
-		  case 0x044: pc |= 0x200; break;
-		  case 0x064: pc |= 0x300; break;
-		  case 0x084: pc |= 0x400; break;
-		  case 0x0A4: pc |= 0x500; break;
-		  case 0x0C4: pc |= 0x600; break;
-		  case 0x0E4: pc |= 0x700; break;
-                  // ALTERNATE: pc |= (uint16_t (op & 0xE0)) << 8;
-	  }
+          pc |= ((uint16_t) (op & 0xE0)) << 4;
 	  clk = 2;
 	  break;
 	case 0x05:		/* EN I */
@@ -287,9 +277,7 @@ void exec_8048 ()
 	case 0xD2:		/* JBb address */
 	case 0xF2:		/* JBb address */
 	  data = ROM (pc);
-	  // ALTERNATE: if (acc & (0x01 << ((op - 0x12) / 0x20)) pc = (pc & 0xF00) | data);
-	  uint8_t test_bit = 0x01 << ((op - 0x12) / 0x20);
-	  if (acc & test_bit) pc = (pc & 0xF00) | data;
+	  if (acc & (0x01 << ((op - 0x12) / 0x20))) pc = (pc & 0xF00) | data;
 	  else pc++;
 	  clk = 2;
 	  break;
@@ -659,17 +647,8 @@ void exec_8048 ()
 	  break;
 	case 0xC5:		/* SEL RB0 */
 	case 0xD5:		/* SEL RB1 */
-	  switch(op) {
-	    case 0xC5:
-	      bs = 0x00;
-	      reg_pnt = 0x00;
-	      break;
-	    case 0xD5:
-	      bs = 0x10;
-	      reg_pnt = 0x18;
-	      break;
-	  }
-	  // ALTERNATE: bs = op & 0x10 ; reg_pnt = op | (op >> 1);
+	  bs = op & 0x10;
+	  reg_pnt = op | (op >> 1);
 	  break;
 	case 0xC6:		/* JZ address */
 	  data = ROM (pc);
@@ -770,22 +749,7 @@ void exec_8048 ()
 	  pc++;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  // begin block
-	  addr = ROM (pc) | a11;
-	  switch(op) {
-		  case 0x34: addr |= 0x100; break; 
-		  case 0x54: addr |= 0x200; break; 
-		  case 0x74: addr |= 0x300; break; 
-		  case 0x94: addr |= 0x400; break; 
-		  case 0xA4: addr |= 0x500; break; 
-		  case 0xC4: addr |= 0x600; break; 
-		  case 0xE4: addr |= 0x700; break; 
-	  }
-	  // end block
-	  // ALTERNATE (pour tout le bloc ci-dessus):
-	  // addr = a11 | ((uint16_t)(op & 0xE0)) << 3 ROM(pc) ;
-	  //
-	  pc = addr;
+	  pc = a11 | ((uint16_t)(op & 0xE0)) << 3 | ROM(pc) ;
 	  clk = 2;
 	  break;
 	case 0xF8:		/* MOV A,Rr */
