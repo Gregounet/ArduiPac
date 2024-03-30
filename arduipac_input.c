@@ -17,28 +17,29 @@ uint8_t read_p2 ()
   int scan_output;
   int keymap;
 
-  if (!(p1 & 0x04))
+  if (!(p1 & 0x04))                                                            // Lecture du clavier
     {
-      scan_input = (p2 & 0x07); // les trois bits de droite
+      scan_input = (p2 & 0x07);
       scan_output = 0xFF;
-/*
-      if (scan_input < 0x06)
+
+      if (scan_input < 0x06)                                                   // Seulement 5 lignes du clavier sont scannées
 	{
 	  for (i = 0x00; i < 0x08; i++)
 	    {
 	      keymap = key_map[scan_input][i];
+		 /*
 	      if ((key[keymap] && ((!joykeystab[km]) || (key_shifts & KB_CAPSLOCK_FLAG))) || (key2[keymap])) scan_output = i ^ 0x07;
+*/
 	    }
 	}
-*/
-      if (scan_output != 0xFF)
+      if (scan_output != 0xFF)                                                 // Au moins une touche est pressée
 	{
-	  p2 = p2 & 0x0F;
-	  p2 = p2 | (scan_output << 5);
+	  p2 &= 0x0F;
+	  p2 |= scan_output << 5;
 	}
-      else p2 = p2 | 0xF0;
+      else p2 |= 0xF0;
     }
-  else p2 = p2 | 0xF0;
+  else p2 |= 0xF0;
 
   return p2;
 }
@@ -46,42 +47,22 @@ uint8_t read_p2 ()
 uint8_t in_bus ()
 {
   uint8_t data = 0; 
-  uint8_t si = 0;
+  uint8_t scan_input = 0;
   uint8_t mode = 0; 
   uint8_t jn = 0;
 
-  if ((p1 & 0x08) && (p1 & 0x10))
+  if ((p1 & 0x08) && (p1 & 0x10))                                              // Ni le 8245 ni la RAM externe ne sont activés TODO: remplacer par p1 & 0x18 == 0x18
     {
-      if (!(p1 & 0x04)) si = (p2 & 0x07);
+      if (!(p1 & 0x04)) scan_input = (p2 & 0x07);                              // On cherche bien à lire les données du clavier. p2 & 0x07 sont les données précedement ecrites dans p2 pour scanner le clavier
       data = 0xFF;
+      data &= 0xFE; // up
       /*
-      if (si == 1)
-	{
-	  mode = app_data.stick[0];
-	  jn = 0;
-	  sticknum = app_data.sticknumber[0] - 1;
-	}
-      else
-	{
-	  mode = app_data.stick[1];
-	  jn = 1;
-	  sticknum = app_data.sticknumber[1] - 1;
-	}
-      switch (mode)
-	{
-	case 1:
-	  data = keyjoy (jn);
-	  break;
-	case 2:
-	  if (joy[sticknum].stick[0].axis[1].d1) data &= 0xFE; // up
-	  if (joy[sticknum].stick[0].axis[0].d2) data &= 0xFD; // right
-	  if (joy[sticknum].stick[0].axis[1].d2) data &= 0xFB; // down
-	  if (joy[sticknum].stick[0].axis[0].d1) data &= 0xF7; // left
-	  if (joy[sticknum].button[0].b || joy[jn].button[1].b) data &= 0xEF; // both buttons
-	  break;
-	}
-      if (si == 1) if (dbstick1) data = dbstick1;
-      else if (dbstick2) data = dbstick2;
+      Données des joysticks
+	  data &= 0xFE; // up
+	  data &= 0xFD; // right
+	  data &= 0xFB; // down
+	  data &= 0xF7; // left
+	  data &= 0xEF; // both buttons
       */
     }
   return data;

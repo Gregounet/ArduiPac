@@ -123,12 +123,12 @@ void exec_8048 ()
       //fprintf(stderr, "0x%03X\t0x%02X\t%s\n",pc,op,lookup[op].mnemonic);
       //fprintf(stderr, "ACC: 0x%02X\tCY: %d\tPC: 0x%03X\tOP: 0x%02X\t%s\n",acc,cy,pc,op,lookup[op].mnemonic);
       op = ROM (pc);
-      if (pc < 0X400) fprintf(stderr, "ACC: 0x%02X\tCY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\t\tPC: 0x%03X (bios)\tOP: 0x%02X\t%s",
+      if (pc < 0X400) fprintf(stderr, "CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\tACC: 0x%02X\tPC: 0x%03X (bios)\tOP: 0x%02X\t%s",
 		      acc, cy,
 		      intel8048_ram[reg_pnt], intel8048_ram[reg_pnt+1], intel8048_ram[reg_pnt+2], intel8048_ram[reg_pnt+3],
 		      intel8048_ram[reg_pnt+4], intel8048_ram[reg_pnt+5], intel8048_ram[reg_pnt+6], intel8048_ram[reg_pnt+7],
 		      pc, op, lookup[op].mnemonic);
-      else fprintf(stderr, "ACC: 0x%02X\tCY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\t\tPC: 0x%03X (cart)\tOP: 0x%02X\t%s",
+      else fprintf(stderr, "CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\tACC: 0x%02X\tPC: 0x%03X (cart)\tOP: 0x%02X\t%s",
 		      acc, cy,
 		      intel8048_ram[reg_pnt], intel8048_ram[reg_pnt+1], intel8048_ram[reg_pnt+2], intel8048_ram[reg_pnt+3],
 		      intel8048_ram[reg_pnt+4], intel8048_ram[reg_pnt+5], intel8048_ram[reg_pnt+6], intel8048_ram[reg_pnt+7],
