@@ -1,38 +1,40 @@
 #include <stdint.h>
+#include <stdio.h>
 
 #include "arduipac_8048.h"
 #include "arduipac_input.h"
 
 void write_p1 (uint8_t data)
 {
+  fprintf(stderr,"\nwrite_p1(0x%02X)\n", data);
   p1 = data;
 }
 
 uint8_t read_p2 ()
 {
   int i;
-  int si;
-  int so;
+  int scan_input;
+  int scan_output;
   int keymap;
 
   if (!(p1 & 0x04))
     {
-      si = (p2 & 0x07); // les trois bits de droite
-      so = 0xFF;
+      scan_input = (p2 & 0x07); // les trois bits de droite
+      scan_output = 0xFF;
 /*
-      if (si < 0x06)
+      if (scan_input < 0x06)
 	{
 	  for (i = 0x00; i < 0x08; i++)
 	    {
-	      keymap = key_map[si][i];
-	      if ((key[keymap] && ((!joykeystab[km]) || (key_shifts & KB_CAPSLOCK_FLAG))) || (key2[keymap])) so = i ^ 0x07;
+	      keymap = key_map[scan_input][i];
+	      if ((key[keymap] && ((!joykeystab[km]) || (key_shifts & KB_CAPSLOCK_FLAG))) || (key2[keymap])) scan_output = i ^ 0x07;
 	    }
 	}
 */
-      if (so != 0xFF)
+      if (scan_output != 0xFF)
 	{
 	  p2 = p2 & 0x0F;
-	  p2 = p2 | (so << 5);
+	  p2 = p2 | (scan_output << 5);
 	}
       else p2 = p2 | 0xF0;
     }

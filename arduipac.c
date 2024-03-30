@@ -11,16 +11,15 @@ void main ()
 {
 	fprintf(stderr,"Entering main()\n");
   //collision = NULL;
-  screen = NULL;
 
   //install_timer ();
-	fprintf(stderr,"  main(): launching init_display()\n");
-  init_display ();
-	fprintf(stderr,"  main(): launching init_8048()\n");
-  init_8048 ();
-	fprintf(stderr,"  main(): launching init_system()\n");
-  init_system ();
-	fprintf(stderr,"  main(): launching exec_8048()\n");
-//   for (int i = 0 ; i < 4096 ; i++) { fprintf(stderr, "0x%02X\n", ROM(i)); }
+  fprintf(stderr,"  main(): launching init_intel8225()\n");
+  init_intel8225 ();
+  fprintf(stderr,"  main(): launching init_intel8048()\n");
+  init_intel8048 ();
+  fprintf(stderr,"  main(): launching init_vmachine()\n");
+  init_vmachine();
+  fprintf(stderr,"  main(): launching exec_8048()\n");
+  //   for (uint16_t int i = 0x0 ; i < 0x1000 ; i++) { fprintf(stderr, "0x%02X\n", ROM(i)); }
   exec_8048();
 }

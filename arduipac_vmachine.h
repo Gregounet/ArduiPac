@@ -30,7 +30,7 @@ void handle_evbll ();
 uint8_t in_bus ();
 void write_p1 (uint8_t d);
 uint8_t read_t1 ();
-void init_system ();
+void init_vmachine ();
 void run ();
 
 #endif /* ARDUIPAC_VMACHINE_H */
