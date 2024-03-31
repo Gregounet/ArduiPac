@@ -17,7 +17,7 @@ uint8_t intel8048_ram[64];
 
 uint8_t psw;         // Program Status Word
 uint8_t cy;          // Carry                                                                            (Values 0x00 / 0x01 : bit 7 of PSW)
-uint8_t ac;          // Alternate Carry (for BCD operations)                                             (Values 0x00 / 0x40 : bit 6 of PSW)
+uint8_t ac;          // Auxiliary Carry (for BCD operations)                                             (Values 0x00 / 0x40 : bit 6 of PSW)
 uint8_t f0;          // Built-in Flag #1                                                                 (Values 0x00 / 0x20 : bit 5 of PSW)
 uint8_t bs;          // Bank Select (select which of the two built-in Register Bank is currently in use) (Values 0x00 / 0x10 : bit 4 of PSW) 
 uint8_t sp;          // Stack Pointer                                                                    (Values 8 - 23 : saved as 3 bits in PSW bits 0 - 2)
@@ -123,21 +123,18 @@ void exec_8048 ()
       //fprintf(stderr, "0x%03X\t0x%02X\t%s\n",pc,op,lookup[op].mnemonic);
       //fprintf(stderr, "ACC: 0x%02X\tCY: %d\tPC: 0x%03X\tOP: 0x%02X\t%s\n",acc,cy,pc,op,lookup[op].mnemonic);
       op = ROM (pc);
-      if (pc < 0X400) fprintf(stderr, "CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\tACC: 0x%02X\tPC: 0x%03X (bios)\tOP: 0x%02X\t%s",
-		      acc, cy,
+      fprintf(stderr, "BS: %d SP: 0x%02X REGPNT: 0x%02X CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\t\tACC: 0x%02X\tPC: 0x%03X (%s)\tOP: 0x%02X\t%s",
+		      (bs >>4), sp, reg_pnt, cy,
 		      intel8048_ram[reg_pnt], intel8048_ram[reg_pnt+1], intel8048_ram[reg_pnt+2], intel8048_ram[reg_pnt+3],
 		      intel8048_ram[reg_pnt+4], intel8048_ram[reg_pnt+5], intel8048_ram[reg_pnt+6], intel8048_ram[reg_pnt+7],
-		      pc, op, lookup[op].mnemonic);
-      else fprintf(stderr, "CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\tACC: 0x%02X\tPC: 0x%03X (cart)\tOP: 0x%02X\t%s",
-		      acc, cy,
-		      intel8048_ram[reg_pnt], intel8048_ram[reg_pnt+1], intel8048_ram[reg_pnt+2], intel8048_ram[reg_pnt+3],
-		      intel8048_ram[reg_pnt+4], intel8048_ram[reg_pnt+5], intel8048_ram[reg_pnt+6], intel8048_ram[reg_pnt+7],
-		      pc, op, lookup[op].mnemonic);
+		      acc, pc, (pc < 0x400) ? "bios" : "cart", op, lookup[op].mnemonic);
       pc++;
       switch (op)
 	{
 	case 0x00:		/* NOP */
 	  break;
+	case 0x01:		/* ILL */
+	case 0x06:		/* ILL */
 	case 0x0B:		/* ILL */
 	case 0x22:		/* ILL */
 	case 0x33:		/* ILL */
@@ -162,8 +159,6 @@ void exec_8048 ()
 	case 0xE1:		/* ILL */
 	case 0xE2:		/* ILL */
 	case 0xF3:		/* ILL */
-	case 0x01:		/* ILL */
-	case 0x06:		/* ILL */
 	  illegal (op);
 	  break;
 	case 0x75:		/* EN CLK */
@@ -409,7 +404,7 @@ void exec_8048 ()
 	      acc += 6;
 	    }
 	  data = (acc & 0xF0) >> 4;
-	  if ((data > 9) || cy)
+	  if ((data > 0x09) || cy)
 	    {
 	      data += 6;
 	      cy = 0x01;
@@ -548,7 +543,8 @@ void exec_8048 ()
 	  break;
 	case 0x90:		/* MOVX @Ri,A */
 	case 0x91:		/* MOVX @Ri,A */
-	  // fprintf(stderr, "OPCODE MOVX @Ri, A\n");
+	  if (op == 0x90) fprintf(stderr, "\nOPCODE MOVX @R0, A\n");
+	  else fprintf(stderr, "\nOPCODE MOVX @R1, A\n");
 	  ext_write (acc, intel8048_ram[reg_pnt + (op - 0x90)]);
 	  clk = 2;
 	  break;
@@ -759,7 +755,7 @@ void exec_8048 ()
 	  pc++;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = a11 | ((uint16_t)(op & 0xE0)) << 3 | ROM(pc) ;
+	  pc = a11 | ((uint16_t)(op & 0xE0)) << 3 | ROM(pc-1) ;
 	  fprintf(stderr, " 0x%03X", pc);
 	  clk = 2;
 	  break;

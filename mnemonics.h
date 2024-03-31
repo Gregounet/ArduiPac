@@ -3,8 +3,8 @@
 
 extern struct lookup_tag {
 	char *mnemonic;
-	unsigned char bytes;
-	unsigned char type;
+	uint8_t bytes;
+	uint8_t type;
 } lookup[];
 
 #endif // (MNEMONICS_H)

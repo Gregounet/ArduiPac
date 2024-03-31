@@ -155,13 +155,15 @@ uint8_t ext_read (uint8_t addr)
  * Appelée par MOVX @Rr, A
  *
  */
+// TODO il semble que la RAM vidéo ne soit pas utilisée au delà de 0xA3 (dec 163) donc je peux probablement récupérer de la RAM (93 octets) dans cette zone.
+// 
 void ext_write (uint8_t data, uint8_t addr)
 {
   int l;
   fprintf(stderr, "\nBeginning ext_write() - p1 == 0x%02X\n", p1) ;
 
   if (!(p1 & 0x08)) {                                                          // Bit 3 (0x08) de P1: on accède à la RAM du 8245
-      fprintf(stderr, "  accessing video_ram[0x%02X]\n", addr) ;
+      fprintf(stderr, "  accessing video_ram[0x%02X] <- 0x%02X\n", addr, data) ;
       if (addr == 0xA0)                                                        // 0xA0 : octet de controle
 	{
 	  if ((intel8245_ram[0xA0] & 0x02) && !(data & 0x02))                  // Bit 1 : fige les valeurs de x et y du faisceau

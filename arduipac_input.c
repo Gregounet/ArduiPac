@@ -3,6 +3,7 @@
 
 #include "arduipac_8048.h"
 #include "arduipac_input.h"
+#include "arduipac_keys.h"
 
 void write_p1 (uint8_t data)
 {
