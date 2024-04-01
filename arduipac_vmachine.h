@@ -11,7 +11,6 @@
 #define START_VBLCLK 5493
 #define END_VBLCLK   7259
 
-extern uint32_t evblclk;
 extern uint32_t master_clk;
 extern uint32_t int_clk;
 extern uint32_t horizontal_clock;
@@ -23,13 +22,14 @@ uint8_t read_p2 ();
 void write_p1 (uint8_t d);
 
 void ext_write (uint8_t dat, uint8_t addr);
-int8_t ext_read (uint8_t addr);
+uint8_t ext_read (uint8_t addr);
 
-void handle_vbl ();
-void handle_evbl ();
+void handle_start_vbl ();
+void handle_end_vbl ();
 
 uint8_t in_bus ();
 uint8_t read_t1 ();
+
 void init_vmachine ();
 
 #endif /* ARDUIPAC_VMACHINE_H */

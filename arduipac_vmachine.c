@@ -3,7 +3,6 @@
 
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
-#include "arduipac_timefunc.h"
 #include "arduipac_vmachine.h"
 #include "arduipac_graphics.h"
 #include "c52_alien_invaders_usa_eu.h"
@@ -11,7 +10,6 @@
 #define FPS 50
 
 uint8_t x_latch, y_latch;
-uint8_t romlatch = 0;
 
 uint32_t int_clk;
 uint32_t master_clk;
@@ -33,57 +31,25 @@ void init_vmachine ()
   clear_collision ();
 }
 
-void handle_vbl ()
+void handle_start_vbl ()
 {
-  //fprintf(stderr,"Entering handle_vbl()\n");
+  fprintf(stderr,"Entering handle_start_vbl()\n");
   draw_region ();
   ext_irq ();
   mstate = 1;
-  ////fprintf(stderr,"Leaving handle_vbl()\n");
+  fprintf(stderr,"Leaving handle_start_vbl()\n");
 }
 
-void handle_evbl ()
+void handle_end_vbl ()
 {
-  static unsigned long first = 0;
-  static unsigned long last = 0;
-  static unsigned int rest_cnt = 0;
-  static unsigned long idx = 0;
-
-  unsigned long delay;
-  unsigned long f;
-  unsigned long tick_tmp;
-  unsigned int antiloop;
-
-  rest_cnt = (rest_cnt + 1) % 15;
-  master_clk -= END_VBLCLK;
-
-  /*
-  if (key2vcnt++ > 10)
-    {
-      key2vcnt = 0;
-      for (i = 0; i < KEY_MAX; i++) key2[i] = 0;
-      dbstick1 = dbstick2 = 0;
-    }
-  */
-
-  delay = TICKSPERSEC / FPS;                                                   // Ticks par frame = délai entre deux trames en ticks
-  f = ((delay + last - gettimeticks ()) * 1000) / TICKSPERSEC;
-  antiloop = 0;
-  idx++;
-  if (first == 0) first = gettimeticks () - 1;
-  tick_tmp = gettimeticks ();
-  if (idx * TICKSPERSEC / (tick_tmp - first) < FPS) delay = 0;
-  /*
-  while (gettimeticks () - last < delay && antiloop < 1000000) antiloop++;
-  last = gettimeticks ();
-  // En gros tout cela constiture une tempo
-  */
-  mstate = 0;
+	fprintf(stderr, "Running handle_end_vbl()\n");
+  	master_clk -= END_VBLCLK;
+  	mstate = 0;
 }
 
 uint8_t read_t1 ()
 {
-  if ((horizontal_clock > 16) || (master_clk > START_VBLCLK)) return 1;
+  if (horizontal_clock > 16 || master_clk > START_VBLCLK) return 1; // TODO pourquoi ce 16 ?
   else return 0;
 }
 
@@ -101,7 +67,7 @@ uint8_t ext_read (uint8_t addr)
 	{
 	case 0xA1:                                                             // 8245 Status byte - Some other bits should normally be set
 	  data = intel8245_ram[0xA0] & 0x02;
-	  if (master_clk > VBLCLK) data |= 0x08;
+	  if (master_clk > START_VBLCLK) data |= 0x08;
 	  if (horizontal_clock < (LINECNT - 7)) data = data | 0x01;
 	  return data;
 	case 0xA2:                                                             // Collision byte

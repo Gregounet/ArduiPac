@@ -8,7 +8,6 @@
 #include "arduipac_8245.h"
 #include "arduipac_vmachine.h"
 #include "arduipac_cset.h"
-#include "arduipac_timefunc.h"
 #include "arduipac_graphics.h"
 
 #define COLLISION_SP0   0x01

@@ -43,7 +43,7 @@ uint8_t tirq_pending;   // Timer Interrupt Pending
 uint8_t itimer;      // Internal Timer Value
 uint8_t timer_on;    // Timer is On
 uint8_t count_on;    // Counter is On
-uint8_t t_flag;      // Timer Flag
+uint8_t timer_flag;      // Timer Flag
 
 uint16_t pc;         // Program Counter (12 bits = 0x0FFF)
 
@@ -293,8 +293,8 @@ void exec_8048 ()
 	case 0x16:		/* JTF */
 	  data = ROM (pc);
 	  if (DEBUG) fprintf(stderr, " (0x%02X)",pc);
-	  if (t_flag) pc = (pc & 0xF00) | data; else pc++;
-	  t_flag = 0;
+	  if (timer_flag) pc = (pc & 0xF00) | data; else pc++;
+	  timer_flag = 0;
 	  clk = 2;
 	  break;
 	case 0x18:		/* INC Rr */
@@ -786,7 +786,7 @@ void exec_8048 ()
 	  if (count_on && mstate == 0) {
 	      itimer++;                                                               // TODO pourquoi incrémenter itimer ici ?
 	      if (itimer == 0x00) {
-		  t_flag = 1;
+		  timer_flag = 1;
 		  timer_irq ();
 		  //draw_region ();
 		}
@@ -800,14 +800,14 @@ void exec_8048 ()
 	      master_count -= 31;
 	      itimer++;
 	      if (itimer == 0x00) {
-		  t_flag = 1;
+		  timer_flag = 1;
 		  timer_irq ();
 		}
 	    }
 	}
 
-      if ((mstate == 0) && (master_clk > START_VBLCLK))  handle_vbl ();
-      if ((mstate == 1) && (master_clk > END_VBLCLK)) handle_evbl ();
+      if (mstate == 0 && master_clk > START_VBLCLK)  handle_start_vbl ();
+      if (mstate == 1 && master_clk > END_VBLCLK) handle_end_vbl ();
 
     }
 }
