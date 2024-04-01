@@ -117,11 +117,12 @@ void exec_8048 ()
   for (;;)
     {
       clk = 1;
-      // op = ROM (pc++); // TODO: il n'y a à ce niveau-la aucune protection contre le franchissement de l'adresse 2047 -> 2048 (ligne d'adresse a11)
+      op = ROM (pc++); // TODO: il n'y a à ce niveau-la aucune protection contre le franchissement de l'adresse 2047 -> 2048 (ligne d'adresse a11)
 
       //fprintf(stderr, "0x%03X\t0x%02X\n",pc,op);
       //fprintf(stderr, "0x%03X\t0x%02X\t%s\n",pc,op,lookup[op].mnemonic);
       //fprintf(stderr, "ACC: 0x%02X\tCY: %d\tPC: 0x%03X\tOP: 0x%02X\t%s\n",acc,cy,pc,op,lookup[op].mnemonic);
+      /*
       op = ROM (pc);
       fprintf(stderr, "BS: %d SP: 0x%02X REGPNT: 0x%02X CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\t\tACC: 0x%02X\tPC: 0x%03X (%s)\tOP: 0x%02X\t%s",
 		      (bs >>4), sp, reg_pnt, cy,
@@ -129,6 +130,7 @@ void exec_8048 ()
 		      intel8048_ram[reg_pnt+4], intel8048_ram[reg_pnt+5], intel8048_ram[reg_pnt+6], intel8048_ram[reg_pnt+7],
 		      acc, pc, (pc < 0x400) ? "bios" : "cart", op, lookup[op].mnemonic);
       pc++;
+      */
       switch (op)
 	{
 	case 0x00:		/* NOP */
@@ -185,7 +187,7 @@ void exec_8048 ()
 	case 0x03:		/* ADD A,#data */
 	case 0x13:		/* ADDC A,#data */
 	  data = ROM (pc++);
-	  fprintf(stderr, " 0x%02X",data);
+	  // fprintf(stderr, " 0x%02X",data);
 	  ac = 0x00;
 	  switch(op) {
 		  case 0x03:
@@ -202,7 +204,7 @@ void exec_8048 ()
 	  clk = 2;
 	  break;
 	case 0xA3:		/* MOVP A,@A */
-	  fprintf(stderr, " (0x%02X)",ROM((pc & 0xF00) | acc));
+	  // fprintf(stderr, " (0x%02X)",ROM((pc & 0xF00) | acc));
 	  acc = ROM ((pc & 0xF00) | acc);
 	  clk = 2;
 	  break;
@@ -232,7 +234,7 @@ void exec_8048 ()
 	case 0xE4:		/* JMP */
 	  pc = ROM (pc) | a11;
           pc |= ((uint16_t) (op & 0xE0)) << 3;
-	  fprintf(stderr, " 0x%03X",pc);
+	  // fprintf(stderr, " 0x%03X",pc);
 	  clk = 2;
 	  break;
 	case 0x05:		/* EN I */
@@ -270,14 +272,14 @@ void exec_8048 ()
 	case 0xD2:		/* JBb address */
 	case 0xF2:		/* JBb address */
 	  data = ROM (pc);
-	  fprintf(stderr, " (0x%02X)",data);
+	  // fprintf(stderr, " (0x%02X)",data);
 	  if (acc & (0x01 << ((op - 0x12) / 0x20))) pc = (pc & 0xF00) | data;
 	  else pc++;
 	  clk = 2;
 	  break;
 	case 0x16:		/* JTF */
 	  data = ROM (pc);
-	  fprintf(stderr, " (0x%02X)",data);
+	  // fprintf(stderr, " (0x%02X)",data);
 	  if (t_flag) pc = (pc & 0xF00) | data;
 	  else pc++;
 	  t_flag = 0;
@@ -299,12 +301,12 @@ void exec_8048 ()
 	  acc                                               = intel8048_ram[intel8048_ram[reg_pnt + (op - 0x20)]];
 	  intel8048_ram[intel8048_ram[reg_pnt + (op - 0x20)]] = data;
 	case 0x23:		/* MOV A,#data */
-	  fprintf(stderr, " 0x%02X",ROM(pc));
+	  // fprintf(stderr, " 0x%02X",ROM(pc));
 	  acc = ROM (pc++);
 	  clk = 2;
 	  break;
 	case 0x53:		/* ANL A,#data */
-	  fprintf(stderr, " 0x%02X",ROM(pc));
+	  // fprintf(stderr, " 0x%02X",ROM(pc));
 	  acc &= ROM (pc++);
 	  clk = 2;
 	  break;
@@ -358,11 +360,11 @@ void exec_8048 ()
 	  break;
 	case 0x40:		/* ORL A,@Ri */
 	case 0x41:		/* ORL A,@Ri */
-	  fprintf(stderr, " (0x%02X)",intel8048_ram[intel8048_ram[reg_pnt + (op - 0x40)]]);
+	  ////  fprintf(stderr, " (0x%02X)",intel8048_ram[intel8048_ram[reg_pnt + (op - 0x40)]]);
 	  acc |= intel8048_ram[intel8048_ram[reg_pnt + (op - 0x40)]];
 	  break;
 	case 0x43:		/* ORL A,#data */
-	  fprintf(stderr, " 0x%02X",ROM(pc));
+	  // fprintf(stderr, " 0x%02X",ROM(pc));
 	  acc |= ROM (pc++);
 	  clk = 2;
 	  break;
@@ -530,7 +532,7 @@ void exec_8048 ()
 	case 0x89:		/* ORL Pp,#data */
 	case 0x8A:		/* ORL Pp,#data */
 	  // fprintf(stderr, "OPCODE ORL Pn, A\n");
-	  fprintf(stderr, " 0x%02X",ROM(pc));
+	  // fprintf(stderr, " 0x%02X",ROM(pc));
 	  if (op == 0x89) write_p1 (p1 | ROM (pc++));
 	  else p2 |= ROM (pc++);
 	  clk = 2;
@@ -543,8 +545,8 @@ void exec_8048 ()
 	  break;
 	case 0x90:		/* MOVX @Ri,A */
 	case 0x91:		/* MOVX @Ri,A */
-	  if (op == 0x90) fprintf(stderr, "\nOPCODE MOVX @R0, A\n");
-	  else fprintf(stderr, "\nOPCODE MOVX @R1, A\n");
+	  // if (op == 0x90) fprintf(stderr, "\nOPCODE MOVX @R0, A\n");
+	  // else fprintf(stderr, "\nOPCODE MOVX @R1, A\n");
 	  ext_write (acc, intel8048_ram[reg_pnt + (op - 0x90)]);
 	  clk = 2;
 	  break;
@@ -572,7 +574,7 @@ void exec_8048 ()
 	case 0x99:		/* ANL Pp,#data */
 	case 0x9A:		/* ANL Pp,#data */
 	  // fprintf(stderr, "OPCODE ANL Pn, A\n");
-	  fprintf(stderr, " 0x%02X",ROM(pc));
+	  // fprintf(stderr, " 0x%02X",ROM(pc));
 	  if (op == 0x99) write_p1 (p1 & ROM (pc++));
 	  else p2 &= ROM (pc++);
 	  clk = 2;
@@ -626,7 +628,7 @@ void exec_8048 ()
 	  break;
 	case 0xB0:		/* MOV @Ri,#data */
 	case 0xB1:		/* MOV @Ri,#data */
-	  fprintf(stderr, " 0x%02X",ROM(pc));
+	  // fprintf(stderr, " 0x%02X",ROM(pc));
 	  intel8048_ram[intel8048_ram[reg_pnt + (op - 0xB1)]] = ROM (pc++);
 	  clk = 2;
 	  break;
@@ -643,7 +645,7 @@ void exec_8048 ()
 	case 0xBD:		/* MOV Rr,#data */
 	case 0xBE:		/* MOV Rr,#data */
 	case 0xBF:		/* MOV Rr,#data */
-	  fprintf(stderr, " 0x%02X",ROM(pc));
+	  // fprintf(stderr, " 0x%02X",ROM(pc));
 	  intel8048_ram[reg_pnt + (op - 0xB8)] = ROM (pc++);
 	  clk = 2;
 	  break;
@@ -660,7 +662,7 @@ void exec_8048 ()
 	  break;
 	case 0x96:		/* JNZ address */
 	  data = ROM (pc);
-	  fprintf(stderr, " 0x%02X",data);
+	  // fprintf(stderr, " 0x%02X",data);
 	  if (acc != 0) pc = (pc & 0xF00) | data;
 	  else pc++;
 	  clk = 2;
@@ -694,7 +696,7 @@ void exec_8048 ()
 	  acc ^= intel8048_ram[intel8048_ram[reg_pnt + (op - 0xD0)]];
 	  break;
 	case 0xD3:		/* XRL A,#data */
-	  fprintf(stderr, " 0x%02X",ROM(pc));
+	  // fprintf(stderr, " 0x%02X",ROM(pc));
 	  acc ^= ROM (pc++);
 	  clk = 2;
 	  break;
@@ -712,14 +714,14 @@ void exec_8048 ()
 	  break;
 	case 0xF6:		/* JC address */
 	  data = ROM (pc);
-	  fprintf(stderr, " (0x%02X)",data);
+	  // fprintf(stderr, " (0x%02X)",data);
 	  if (cy) pc = (pc & 0xF00) | data;
 	  else pc++;
 	  clk = 2;
 	  break;
 	case 0xE6:		/* JNC address */
 	  data = ROM (pc);
-	  fprintf(stderr, " (0x%02X)",data);
+	  // fprintf(stderr, " (0x%02X)",data);
 	  if (!cy) pc = (pc & 0xF00) | data;
 	  else pc++;
 	  break;
@@ -734,7 +736,7 @@ void exec_8048 ()
 	case 0xEF:		/* DJNZ Rr,address */
 	  intel8048_ram[reg_pnt + (op - 0xE8)]--;
 	  data = ROM (pc);
-	  fprintf(stderr, " 0x%02X",data);
+	  // fprintf(stderr, " 0x%02X",data);
 	  if (intel8048_ram[reg_pnt + (op - 0xE8)] != 0) pc = (pc & 0xF00) | data;
 	  else pc++;
 	  clk = 2;
@@ -756,7 +758,7 @@ void exec_8048 ()
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
 	  pc = a11 | ((uint16_t)(op & 0xE0)) << 3 | ROM(pc-1) ;
-	  fprintf(stderr, " 0x%03X", pc);
+	  // fprintf(stderr, " 0x%03X", pc);
 	  clk = 2;
 	  break;
 	case 0xF8:		/* MOV A,Rr */
@@ -770,7 +772,7 @@ void exec_8048 ()
 	  acc = intel8048_ram[reg_pnt + (op - 0xF8)];
 	  break;
 	}
-      fprintf(stderr,"\n");
+      // fprintf(stderr,"\n");
       master_clk += clk;
       horizontal_clock += clk;
       

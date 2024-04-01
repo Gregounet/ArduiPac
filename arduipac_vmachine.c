@@ -151,33 +151,71 @@ uint8_t ext_read (uint8_t addr)
   return 0;
 }
 
-/*
- * Appelée par MOVX @Rr, A
- *
- */
-// TODO il semble que la RAM vidéo ne soit pas utilisée au delà de 0xA3 (dec 163) donc je peux probablement récupérer de la RAM (93 octets) dans cette zone.
-// 
 void ext_write (uint8_t data, uint8_t addr)
 {
-  int l;
-  fprintf(stderr, "\nBeginning ext_write() - p1 == 0x%02X\n", p1) ;
-
-  if (!(p1 & 0x08)) {                                                          // Bit 3 (0x08) de P1: on accède à la RAM du 8245
-      fprintf(stderr, "  accessing video_ram[0x%02X] <- 0x%02X\n", addr, data) ;
-      if (addr == 0xA0)                                                        // 0xA0 : octet de controle
-	{
-	  if ((intel8245_ram[0xA0] & 0x02) && !(data & 0x02))                  // Bit 1 : fige les valeurs de x et y du faisceau
-	    {
+  if (!(p1 & 0x08)) {
+      fprintf(stderr, "Accessing video_ram[0x%02X] <- 0x%02X\n", addr, data) ;
+      if (addr < 0x10 || (addr >= 0x80 && addr < 0xA0)) {
+	      fprintf(stderr, " Ecriture du sprite %d.%s - [0x%02X] <- 0x%02X\n",
+			      ((addr<0x10) ? addr/4 : (addr-0x80)/8)+1, 
+			      ((addr>=0x80) ? "shape"
+			       : ((addr%4 == 0) ? "y"
+				       :((addr%4 == 1) ? "x" : "attributes"))
+			       ), addr, data) ;
+      	if (addr < 0x10) switch (addr%4) {
+			case 0: fprintf(stderr, "  Y = %d\n", data); break;
+			case 1: fprintf(stderr, "  X = %d\n", data); break;
+			case 2: fprintf(stderr, "  Color = 0x%01X, Even shift = %d, Full shift = %d\n", data & 0x3F >> 3, data & 0x02 >> 1, data & 0x01); break;
+      	}
+      }
+      if ((addr >= 0x10) && (addr < 0x40)) {
+	      fprintf(stderr, " Ecriture du caractère %d.%s - [0x%02X] <- 0x%02X\n",
+		      (addr-0x10)/4 + 1, 
+		      ((addr-0x10)%4 == 0)
+		       ?"y"
+		       :((addr-0x10)%4 == 1) ? "x"
+			       : ((addr-0x10)%4 == 3) ? "character" : "color",
+			      addr, data) ;
+		switch (addr%4) {
+			case 0: fprintf(stderr, "  Y_start = %d\n", data); break;
+			case 1: fprintf(stderr, "  X = %d\n", data); break;
+			case 2: fprintf(stderr, "  Cset pointer (lower part) = 0x%02%X d\n", data); break;
+			case 3: fprintf(stderr, "  Cset pointer (upper part) = 0x%01X, Color = %0x01X\n", data & 0x03, data & 0x07 >> 1); break;
+		}
+      }
+      if ((addr >= 0x40) && (addr < 0x80)) {
+	      fprintf(stderr, " Ecriture du quad %d.%d.%s - [0x%02X] <- 0x%02X\n", 
+	              (addr-0X40)/0x10 + 1, 
+		      (((addr-0x40)%0x10)/4 + 1), 
+		      ((addr-0x40)%4 == 0) ? "y"
+		       : ((addr-0x40)%4 == 1)
+			       ? "x"
+			       : ((addr-0x40)%4 == 3) ? "character" : "color",
+			      addr, data) ;
+		switch (addr%4) {
+			case 0: fprintf(stderr, "  Y_start = %d\n", data); break;
+			case 1: fprintf(stderr, "  X = %d\n", data); break;
+			case 2: fprintf(stderr, "  Cset pointer (lower part) = 0x%02%X d\n", data); break;
+			case 3: fprintf(stderr, "  Cset pointer (upper part) = 0x%01X, Color = %0x01X\n", data & 0x03, data & 0x07 >> 1); break;
+                }
+      }
+      if (addr >= 0xA0 && addr <= 0xA3) fprintf(stderr, " Octet de controle - [0x%02X] <- 0x%02X\n", addr, data) ;
+      if (addr == 0xA0) {
+	  fprintf(stderr, "  Control register: Display enable = %d, Horiz int enable = %d, Grid = %d, Fill mode = %d, Dot grid = %1, Latch position = %1\n",
+			  data & 0x20 >> 5, data & 0x01, data & 0x04 >> 3, data & 0x80 >> 7, data & 0x40 >> 6, data & 0x02 >> 1);
+	  if (intel8245_ram[0xA0] & 0x02 && !data & 0x02) {
 	      y_latch = master_clk / 22;
 	      x_latch = horizontal_clock * 12;
 	      if (y_latch > 241) y_latch = 0xFF;
 	    }
 	  if ((master_clk <= VBLCLK) && (intel8245_ram[0xA0] != data)) draw_region ();
 	}
-      else if (addr == 0xA3) for (int i = l; i < MAXLINES; i++) ;              // 0xA3 : octet des couleurs TODO: je pense que je peux retirer ce code
-      else if ((addr >= 0x40) && (addr <= 0x7F) && ((addr & 2) == 0))          // 0x40 - 0x7F : les quatre Quads
-	{
-	  fprintf(stderr, "ext_write(): ecriture d un Quad\n") ;
+      else if (addr == 0xA1) fprintf(stderr, "  Status register: SHOULD NOT WRITE HERE !\n");
+      else if (addr == 0xA3) fprintf(stderr, "  Collision register\n");
+      else if (addr == 0xA3) fprintf(stderr, "  Color register: Background color = 0x%1X, Grid color = 0x%1X, Grid lum = %d\n", data & 0x07, data & 0x38 > 3, data & 0x40 > 6);
+      else if (addr >= 0x40 && addr < 0x80 && addr & 0x02 == 0)                // 0x40 - 0x7F : les quatre Quads, addr & 0x02 == 0 -> les positions X et Y_start du caractère
+	{                                                                      // TODO comprendre ce code
+          fprintf(stderr, "  Simplifying quad data\n") ;
 	  addr = addr & 0x71;
 	  if (!(addr & 0x01)) data &= 0xFE;
 	  intel8245_ram[addr] = intel8245_ram[addr + 4] = intel8245_ram[addr + 8] = intel8245_ram[addr + 12] = data;
@@ -186,7 +224,7 @@ void ext_write (uint8_t data, uint8_t addr)
     }
   // else if (!(p1 & 0x50)) // TODO: vérifier cette condition - Il est probale que je vais pouvoir trfansformer ceci en & 0x40
   else if (!(p1 & 0x10) && !(p1 & 0x40)) {
-      fprintf(stderr, "  accessing external_ram[0x%02X]\n", addr) ;
+      fprintf(stderr, "Accessing external_ram[0x%02X] <- 0x%02X\n (%s)", addr, data, (addr < 0x80) ? "writing" : "doing nothing") ;
       if (addr < 0x80) external_ram[addr] = data; // J'ai bien l'impression que je dois considérer la RAM externe comme 128 et non 256 bits
     }
 }
