@@ -8,18 +8,15 @@
 #include "arduipac_graphics.h"
 #include "c52_alien_invaders_usa_eu.h"
 
-#define FPS 60
+#define FPS 50
 
-static uint8_t x_latch, y_latch;
-static uint8_t romlatch = 0;
+uint8_t x_latch, y_latch;
+uint8_t romlatch = 0;
 
-uint32_t evblclk;
 uint32_t int_clk;
 uint32_t master_clk;
 uint32_t horizontal_clock;
 uint8_t mstate;
-uint8_t pendirq = 0;
-uint8_t enahirq = 1;
 
 uint8_t external_ram[256];
 
@@ -58,7 +55,7 @@ void handle_evbl ()
   unsigned int antiloop;
 
   rest_cnt = (rest_cnt + 1) % 15;
-  master_clk -= evblclk;
+  master_clk -= END_VBLCLK;
 
   /*
   if (key2vcnt++ > 10)
@@ -69,32 +66,27 @@ void handle_evbl ()
     }
   */
 
-  /* TODO Qué merdier !
-  delay = TICKSPERSEC / FPS; // Ticks par frame = délai entre deux trames en ticks
+  delay = TICKSPERSEC / FPS;                                                   // Ticks par frame = délai entre deux trames en ticks
   f = ((delay + last - gettimeticks ()) * 1000) / TICKSPERSEC;
   antiloop = 0;
   idx++;
   if (first == 0) first = gettimeticks () - 1;
   tick_tmp = gettimeticks ();
   if (idx * TICKSPERSEC / (tick_tmp - first) < FPS) delay = 0;
+  /*
   while (gettimeticks () - last < delay && antiloop < 1000000) antiloop++;
   last = gettimeticks ();
   // En gros tout cela constiture une tempo
-
-  mstate = 0;
   */
+  mstate = 0;
 }
 
 uint8_t read_t1 ()
 {
-  if ((horizontal_clock > 16) || (master_clk > VBLCLK)) return 1; // VBLCLK = 5493
+  if ((horizontal_clock > 16) || (master_clk > START_VBLCLK)) return 1;
   else return 0;
 }
 
-/*
- * Appelée par MOVX A, @Rr
- *
- */
 uint8_t ext_read (uint8_t addr)
 {
   uint8_t data;
@@ -147,12 +139,14 @@ uint8_t ext_read (uint8_t addr)
 	  return intel8245_ram[addr];
 	}
     }
-  else if (!(p1 & 0x10)) return external_ram[addr];                            // p1 & 0x10 : hack lié à la cartouche MegaCart
+  else if (!(p1 & 0x10)) return external_ram[addr];                            // p1 & 0x10 : hack lié à la cartouche MegaCart TODO: supprimer
   return 0;
 }
 
 void ext_write (uint8_t data, uint8_t addr)
 {
+  uint16_t cecette ;
+
   if (!(p1 & 0x08)) {
       fprintf(stderr, "Accessing video_ram[0x%02X] <- 0x%02X\n", addr, data) ;
       if (addr < 0x10 || (addr >= 0x80 && addr < 0xA0)) {
@@ -165,7 +159,7 @@ void ext_write (uint8_t data, uint8_t addr)
       	if (addr < 0x10) switch (addr%4) {
 			case 0: fprintf(stderr, "  Y = %d\n", data); break;
 			case 1: fprintf(stderr, "  X = %d\n", data); break;
-			case 2: fprintf(stderr, "  Color = 0x%01X, Even shift = %d, Full shift = %d\n", data & 0x3F >> 3, data & 0x02 >> 1, data & 0x01); break;
+			case 2: fprintf(stderr, "  Color = 0x%01X, Even shift = %d, Full shift = %d\n", (data & 0x3F) >> 3, (data & 0x02) >> 1, data & 0x01); break;
       	}
       }
       if ((addr >= 0x10) && (addr < 0x40)) {
@@ -174,57 +168,66 @@ void ext_write (uint8_t data, uint8_t addr)
 		      ((addr-0x10)%4 == 0)
 		       ?"y"
 		       :((addr-0x10)%4 == 1) ? "x"
-			       : ((addr-0x10)%4 == 3) ? "character" : "color",
+			       : ((addr-0x10)%4 == 2) ? "character" : "color",
 			      addr, data) ;
 		switch (addr%4) {
 			case 0: fprintf(stderr, "  Y_start = %d\n", data); break;
 			case 1: fprintf(stderr, "  X = %d\n", data); break;
-			case 2: fprintf(stderr, "  Cset pointer (lower part) = 0x%02%X d\n", data); break;
-			case 3: fprintf(stderr, "  Cset pointer (upper part) = 0x%01X, Color = %0x01X\n", data & 0x03, data & 0x07 >> 1); break;
-		}
+			case 2: fprintf(stderr, "  Cset pointer (lower part) = 0x%02X\n", data); break;
+			case 3: fprintf(stderr, "  Cset pointer (upper part) = 0x%01X, Color = 0x%01X\n", data & 0x01, (data & 0x0E) >> 1);
+				cecette = ((data & 0x01) << 8) + intel8245_ram[addr-1];
+				fprintf(stderr, "  CSET = 0x%03X - character = 0x%02X\n", cecette, cecette/8);
+				fprintf(stderr, "  ou bien CSET = 0x%03X - character = 0x%02X\n", cecette - (intel8245_ram[addr-3]/2), (cecette - intel8245_ram[addr-3]/2)/8);
+			       	break;
+		} 
       }
       if ((addr >= 0x40) && (addr < 0x80)) {
-	      fprintf(stderr, " Ecriture du quad %d.%d.%s - [0x%02X] <- 0x%02X\n", 
+	      fprintf(stderr, " Ecriture du quad %d, caractère %d, %s - [0x%02X] <- 0x%02X\n", 
 	              (addr-0X40)/0x10 + 1, 
 		      (((addr-0x40)%0x10)/4 + 1), 
 		      ((addr-0x40)%4 == 0) ? "y"
 		       : ((addr-0x40)%4 == 1)
 			       ? "x"
-			       : ((addr-0x40)%4 == 3) ? "character" : "color",
+			       : ((addr-0x40)%4 == 2) ? "character" : "color",
 			      addr, data) ;
 		switch (addr%4) {
 			case 0: fprintf(stderr, "  Y_start = %d\n", data); break;
 			case 1: fprintf(stderr, "  X = %d\n", data); break;
-			case 2: fprintf(stderr, "  Cset pointer (lower part) = 0x%02%X d\n", data); break;
-			case 3: fprintf(stderr, "  Cset pointer (upper part) = 0x%01X, Color = %0x01X\n", data & 0x03, data & 0x07 >> 1); break;
+			case 2: fprintf(stderr, "  Cset pointer (lower part) = 0x%02X\n", data); break;
+			case 3: fprintf(stderr, "  Cset pointer (upper part) = 0x%01X, Color = 0x%01X\n", data & 0x01, (data & 0x0E) >> 1); break;
+				cecette = ((data & 0x01) << 8) + intel8245_ram[addr-1];
+				fprintf(stderr, "  CSET = 0x%03X - character = 0x%02X\n", cecette, cecette/8);
+				fprintf(stderr, "  ou bien CSET = 0x%03X - character = 0x%02X\n", cecette - (intel8245_ram[addr-3]/2), (cecette - intel8245_ram[addr-3]/2)/8);
+			       	break;
                 }
       }
       if (addr >= 0xA0 && addr <= 0xA3) fprintf(stderr, " Octet de controle - [0x%02X] <- 0x%02X\n", addr, data) ;
       if (addr == 0xA0) {
-	  fprintf(stderr, "  Control register: Display enable = %d, Horiz int enable = %d, Grid = %d, Fill mode = %d, Dot grid = %1, Latch position = %1\n",
-			  data & 0x20 >> 5, data & 0x01, data & 0x04 >> 3, data & 0x80 >> 7, data & 0x40 >> 6, data & 0x02 >> 1);
+	  fprintf(stderr, "  Control register: Display enable = %d, Horiz int enable = %d, Grid = %d, Fill mode = %d, Dot grid = %d, Latch position = %d\n",
+			  (data & 0x20) >> 5, (data & 0x01), (data & 0x08) >> 3, (data & 0x80) >> 7, (data & 0x40) >> 6, (data & 0x02) >> 1);
 	  if (intel8245_ram[0xA0] & 0x02 && !data & 0x02) {
 	      y_latch = master_clk / 22;
 	      x_latch = horizontal_clock * 12;
 	      if (y_latch > 241) y_latch = 0xFF;
 	    }
-	  if ((master_clk <= VBLCLK) && (intel8245_ram[0xA0] != data)) draw_region ();
+	  if (master_clk <= START_VBLCLK && intel8245_ram[0xA0] != data) draw_region ();
 	}
       else if (addr == 0xA1) fprintf(stderr, "  Status register: SHOULD NOT WRITE HERE !\n");
-      else if (addr == 0xA3) fprintf(stderr, "  Collision register\n");
-      else if (addr == 0xA3) fprintf(stderr, "  Color register: Background color = 0x%1X, Grid color = 0x%1X, Grid lum = %d\n", data & 0x07, data & 0x38 > 3, data & 0x40 > 6);
-      else if (addr >= 0x40 && addr < 0x80 && addr & 0x02 == 0)                // 0x40 - 0x7F : les quatre Quads, addr & 0x02 == 0 -> les positions X et Y_start du caractère
+      else if (addr == 0xA2) fprintf(stderr, "  Collision register\n");
+      else if (addr == 0xA3) fprintf(stderr, "  Color register: Background color = 0x%1X, Grid color = 0x%1X, Grid lum = %d\n", data & 0x07, (data & 0x38) > 3, (data & 0x40) > 6);
+      else if (addr >= 0x40 && addr < 0x80 && addr & (0x02 == 0))                // 0x40 - 0x7F : les quatre Quads, addr & 0x02 == 0 -> les positions X et Y_start du caractère
 	{                                                                      // TODO comprendre ce code
           fprintf(stderr, "  Simplifying quad data\n") ;
 	  addr = addr & 0x71;
 	  if (!(addr & 0x01)) data &= 0xFE;
 	  intel8245_ram[addr] = intel8245_ram[addr + 4] = intel8245_ram[addr + 8] = intel8245_ram[addr + 12] = data;
 	}
+      if (addr >= 0xA7 && addr <= 0xAA) fprintf(stderr, " Son  - [0x%02X] <- 0x%02X\n", addr, data) ;
       intel8245_ram[addr] = data;
     }
   // else if (!(p1 & 0x50)) // TODO: vérifier cette condition - Il est probale que je vais pouvoir trfansformer ceci en & 0x40
   else if (!(p1 & 0x10) && !(p1 & 0x40)) {
-      fprintf(stderr, "Accessing external_ram[0x%02X] <- 0x%02X\n (%s)", addr, data, (addr < 0x80) ? "writing" : "doing nothing") ;
+      fprintf(stderr, "Accessing external_ram[0x%02X] <- 0x%02X (%s)\n", addr, data, (addr < 0x80) ? "writing" : "doing nothing") ;
       if (addr < 0x80) external_ram[addr] = data; // J'ai bien l'impression que je dois considérer la RAM externe comme 128 et non 256 bits
     }
 }
