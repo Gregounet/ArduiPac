@@ -4,11 +4,13 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "arduipac_8048.h"
 #include "arduipac_8245.h"
+#include "arduipac_8048.h"
 #include "arduipac_vmachine.h"
 #include "arduipac_cset.h"
 #include "arduipac_graphics.h"
+
+#define DEBUG 0
 
 #define COLLISION_SP0   0x01
 #define COLLISION_SP1   0x02

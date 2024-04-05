@@ -5,7 +5,7 @@
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
 #include "arduipac_vmachine.h"
-#include "c52_alien_invaders_usa_eu.h"
+#include "arduipac_bios_rom.h"
 #include "mnemonics.h"
 
 #define DEBUG 0
@@ -686,15 +686,9 @@ exec_8048 ()
 	  data = ROM (pc);
 	  fprintf (stderr, " 0x%02X", data);
 	  if (f1)
-	    {
-	      fprintf (stderr, " branchement\n");
 	      pc = (pc & 0xF00) | data;
-	    }
 	  else
-	    {
 	      fprintf (stderr, " tout droit");
-	      pc++;
-	    }
 	  clk = 2;
 	  break;
 	case 0xB5:		/* CPL F1 */
@@ -884,7 +878,7 @@ exec_8048 ()
       bigben++;
 
       master_clk += clk;
-      if(DEBUG) printf (stderr, "master_clk == %d\n", master_clk);
+      if(DEBUG) fprintf (stderr, "master_clk == %d\n", master_clk);
 
       horizontal_clock += clk;
 

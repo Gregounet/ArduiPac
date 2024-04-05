@@ -1,11 +1,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "arduipac_vmachine.h"
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
-#include "arduipac_vmachine.h"
 #include "arduipac_graphics.h"
-#include "c52_alien_invaders_usa_eu.h"
+#include "arduipac_bios_rom.h"
+
+#define DEBUG 0
 
 #define FPS 50
 

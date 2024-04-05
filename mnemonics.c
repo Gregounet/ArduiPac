@@ -1,7 +1,8 @@
 #include <stdint.h>
-#include "arduipac_8048.h"
+
 #include "mnemonics.h"
 
+#define DEBUG 0
 
 struct lookup_tag lookup[] = {
   /* 00 */ {"NOP", 1, 0},

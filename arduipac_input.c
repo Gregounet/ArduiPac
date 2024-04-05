@@ -1,9 +1,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "arduipac_8048.h"
 #include "arduipac_input.h"
-#include "arduipac_keys.h"
+#include "arduipac_8048.h"
+
+#define DEBUG 0
 
 void
 write_p1 (uint8_t data)
@@ -31,7 +32,7 @@ read_p2 ()
 	{
 	  for (i = 0x00; i < 0x08; i++)
 	    {
-	      keymap = key_map[scan_input][i];
+	      // keymap = key_map[scan_input][i];
 	      /*
 	         if ((key[keymap] && ((!joykeystab[km]) || (key_shifts & KB_CAPSLOCK_FLAG))) || (key2[keymap])) scan_output = i ^ 0x07;
 	       */

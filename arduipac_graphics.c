@@ -3,6 +3,8 @@
 #include "arduipac_graphics.h"
 #include "arduipac_8245.h"
 
+#define DEBUG 0
+
 uint8_t *
 create_bitmap (int w, int h)
 {
