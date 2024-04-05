@@ -9,7 +9,8 @@
 void
 write_p1 (uint8_t data)
 {
-  if (DEBUG) fprintf(stderr,"write_p1(0x%02X)\n", data);
+  if (DEBUG)
+    fprintf (stderr, "write_p1(0x%02X)\n", data);
   p1 = data;
 }
 
@@ -21,7 +22,8 @@ read_p2 ()
   int scan_output;
   int keymap;
 
-  if (DEBUG) fprintf(stderr,"read_p2()\n");
+  if (DEBUG)
+    fprintf (stderr, "read_p2()\n");
 
   if (!(p1 & 0x04))		// Lecture du clavier
     {
@@ -60,7 +62,8 @@ in_bus ()
   uint8_t mode = 0;
   uint8_t jn = 0;
 
-  if (DEBUG) fprintf(stderr,"read_p2()\n");
+  if (DEBUG)
+    fprintf (stderr, "read_p2()\n");
 
   if ((p1 & 0x08) && (p1 & 0x10))	// Ni le 8245 ni la RAM externe ne sont activés TODO: remplacer par p1 & 0x18 == 0x18
     {

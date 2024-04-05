@@ -8,8 +8,8 @@
 #define LINECNT 21
 #define MAXLINES 500
 
-#define START_VBLCLK 5493 // Valeur commune à NTSC et PAL
-#define END_VBLCLK   5964 // NTSC
+#define START_VBLCLK 5493	// Valeur commune à NTSC et PAL
+#define END_VBLCLK   5964	// NTSC
 // #define END_VBLCLK   7259 // PAL
 
 extern uint32_t master_clk;

@@ -396,10 +396,12 @@ draw_display ()
 void
 init_intel8225 ()
 {
-  if (DEBUG) fprintf(stderr," Initializing intel8225_ram\n");
+  if (DEBUG)
+    fprintf (stderr, " Initializing intel8225_ram\n");
   for (uint8_t i = 0x00; i < 0xFF; i++)
     intel8245_ram[i] = 0x00;
-  if (DEBUG) fprintf(stderr," Initializing bitmap\n");
+  if (DEBUG)
+    fprintf (stderr, " Initializing bitmap\n");
   for (uint32_t i = 0; i < BITMAP_WIDTH * BITMAP_HEIGHT; i++)
     bmp[i] = 0x00;
 }

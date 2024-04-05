@@ -12,17 +12,22 @@
 void
 main ()
 {
-  if (DEBUG) fprintf(stderr,"Entering main()\n");
+  if (DEBUG)
+    fprintf (stderr, "Entering main()\n");
   //collision = NULL;
 
   //install_timer ();
-  if (DEBUG) fprintf(stderr,"  main(): launching init_intel8225()\n");
+  if (DEBUG)
+    fprintf (stderr, "  main(): launching init_intel8225()\n");
   init_intel8225 ();
-  if (DEBUG) fprintf(stderr,"  main(): launching init_intel8048()\n");
+  if (DEBUG)
+    fprintf (stderr, "  main(): launching init_intel8048()\n");
   init_intel8048 ();
-  if (DEBUG) fprintf(stderr,"  main(): launching init_vmachine()\n");
+  if (DEBUG)
+    fprintf (stderr, "  main(): launching init_vmachine()\n");
   init_vmachine ();
-  if (DEBUG) fprintf(stderr,"  main(): launching exec_8048()\n");
+  if (DEBUG)
+    fprintf (stderr, "  main(): launching exec_8048()\n");
   //for (uint16_t int i = 0x0 ; i < 0x1000 ; i++) { fprintf(stderr, "0x%02X\n", ROM(i)); }
   exec_8048 ();
 }

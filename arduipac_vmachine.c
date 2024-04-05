@@ -23,15 +23,18 @@ uint8_t external_ram[256];
 void
 init_vmachine ()
 {
-  if (DEBUG) fprintf(stderr,"Entering init_vmachine()\n");
+  if (DEBUG)
+    fprintf (stderr, "Entering init_vmachine()\n");
   master_clk = 0;
   horizontal_clock = 0;
   mstate = 0;
 
-  if (DEBUG) fprintf(stderr," Initializing external_ram\n");
+  if (DEBUG)
+    fprintf (stderr, " Initializing external_ram\n");
   for (uint8_t i = 0x00; i < 0xFF; i++)
     external_ram[i] = 0x00;
-  if (DEBUG) fprintf(stderr," Launching clear_collision()\n");
+  if (DEBUG)
+    fprintf (stderr, " Launching clear_collision()\n");
   clear_collision ();
 }
 
@@ -39,7 +42,8 @@ void
 handle_start_vbl ()
 {
   draw_region ();
-  fprintf (stderr, "handle_vbl() -> ext_irq()\n");
+  if (DEBUG)
+    fprintf (stderr, "handle_vbl() -> ext_irq()\n");
   ext_irq ();
   mstate = 1;
 }
@@ -47,7 +51,8 @@ handle_start_vbl ()
 void
 handle_end_vbl ()
 {
-  if (DEBUG) fprintf(stderr, "Running handle_end_vbl()\n");
+  if (DEBUG)
+    fprintf (stderr, "Running handle_end_vbl()\n");
   master_clk -= END_VBLCLK;
   mstate = 0;
 }
@@ -131,7 +136,9 @@ ext_write (uint8_t data, uint8_t addr)
 
   if (!(p1 & 0x08))
     {
-      if (DEBUG) fprintf(stderr, "Accessing video_ram[0x%02X] <- 0x%02X\n", addr, data) ;
+      if (DEBUG)
+	fprintf (stderr, "Accessing video_ram[0x%02X] <- 0x%02X\n", addr,
+		 data);
 /*
       if (addr < 0x10 || (addr >= 0x80 && addr < 0xA0)) {
 	      fprintf(stderr, " Ecriture du sprite %d.%s - [0x%02X] <- 0x%02X\n",
@@ -186,11 +193,17 @@ ext_write (uint8_t data, uint8_t addr)
                 }
       }
 */
-      if (addr >= 0xA0 && addr <= 0xA3 && DEBUG) fprintf(stderr, " Octet de controle - [0x%02X] <- 0x%02X\n", addr, data) ;
+      if (addr >= 0xA0 && addr <= 0xA3 && DEBUG)
+	fprintf (stderr, " Octet de controle - [0x%02X] <- 0x%02X\n", addr,
+		 data);
       if (addr == 0xA0)
 	{
-        if (DEBUG) fprintf(stderr, "  Control register: Display enable = %d, Horiz int enable = %d, Grid = %d, Fill mode = %d, Dot grid = %d, Latch position = %d\n",
-                        (data & 0x20) >> 5, (data & 0x01), (data & 0x08) >> 3, (data & 0x80) >> 7, (data & 0x40) >> 6, (data & 0x02) >> 1);
+	  if (DEBUG)
+	    fprintf (stderr,
+		     "  Control register: Display enable = %d, Horiz int enable = %d, Grid = %d, Fill mode = %d, Dot grid = %d, Latch position = %d\n",
+		     (data & 0x20) >> 5, (data & 0x01), (data & 0x08) >> 3,
+		     (data & 0x80) >> 7, (data & 0x40) >> 6,
+		     (data & 0x02) >> 1);
 	  if (intel8245_ram[0xA0] & 0x02 && !data & 0x02)
 	    {
 	      y_latch = master_clk / 22;
@@ -201,25 +214,34 @@ ext_write (uint8_t data, uint8_t addr)
 	  if (master_clk <= START_VBLCLK && intel8245_ram[0xA0] != data)
 	    draw_region ();
 	}
-           else if (addr == 0xA1 && DEBUG) fprintf(stderr, "  Status register: SHOULD NOT WRITE HERE !\n");
-           else if (addr == 0xA2 && DEBUG) fprintf(stderr, "  Collision register\n");
-           else if (addr == 0xA3 && DEBUG) fprintf(stderr, "  Color register: Background color = 0x%1X, Grid color = 0x%1X, Grid lum = %d\n", data & 0x07, (data & 0x38) > 3, (data & 0x40) > 6);
+      else if (addr == 0xA1 && DEBUG)
+	fprintf (stderr, "  Status register: SHOULD NOT WRITE HERE !\n");
+      else if (addr == 0xA2 && DEBUG)
+	fprintf (stderr, "  Collision register\n");
+      else if (addr == 0xA3 && DEBUG)
+	fprintf (stderr,
+		 "  Color register: Background color = 0x%1X, Grid color = 0x%1X, Grid lum = %d\n",
+		 data & 0x07, (data & 0x38) > 3, (data & 0x40) > 6);
       else if (addr >= 0x40 && addr < 0x80 && addr & (0x02 == 0))	// 0x40 - 0x7F : les quatre Quads, addr & 0x02 == 0 -> les positions X et Y_start du caractère
 	{			// TODO comprendre ce code
-	  if (DEBUG) fprintf (stderr, "  Simplifying quad data\n");
+	  if (DEBUG)
+	    fprintf (stderr, "  Simplifying quad data\n");
 	  addr = addr & 0x71;
 	  if (!(addr & 0x01))
 	    data &= 0xFE;
 	  intel8245_ram[addr] = intel8245_ram[addr + 4] =
 	    intel8245_ram[addr + 8] = intel8245_ram[addr + 12] = data;
 	}
-      if (addr >= 0xA7 && addr <= 0xAA && DEBUG) fprintf(stderr, " Son  - [0x%02X] <- 0x%02X\n", addr, data) ;
+      if (addr >= 0xA7 && addr <= 0xAA && DEBUG)
+	fprintf (stderr, " Son  - [0x%02X] <- 0x%02X\n", addr, data);
       intel8245_ram[addr] = data;
     }
   // else if (!(p1 & 0x50)) // TODO: vérifier cette condition - Il est probale que je vais pouvoir transformer ceci en & 0x40
   else if (!(p1 & 0x10) && !(p1 & 0x40))
     {
-      if (DEBUG) fprintf(stderr, "Accessing external_ram[0x%02X] <- 0x%02X (%s)\n", addr, data, (addr < 0x80) ? "writing" : "doing nothing") ;
+      if (DEBUG)
+	fprintf (stderr, "Accessing external_ram[0x%02X] <- 0x%02X (%s)\n",
+		 addr, data, (addr < 0x80) ? "writing" : "doing nothing");
       if (addr < 0x80)
 	external_ram[addr] = data;	// J'ai bien l'impression que je dois considérer la RAM externe comme 128 et non 256 bits
     }

@@ -145,19 +145,21 @@ exec_8048 ()
     {
       clk = 1;
 
-      if (DEBUG) {
-      op = ROM (pc);
-      fprintf (stderr,
-	       "%06d\tBS: %d SP: 0x%02X REGPNT: 0x%02X CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\t\tACC: 0x%02X\tPC: 0x%03X (%s)\tOP: 0x%02X\t%s",
-	       bigben, (bs >> 4), sp, reg_pnt, cy, intel8048_ram[reg_pnt],
-	       intel8048_ram[reg_pnt + 1], intel8048_ram[reg_pnt + 2],
-	       intel8048_ram[reg_pnt + 3], intel8048_ram[reg_pnt + 4],
-	       intel8048_ram[reg_pnt + 5], intel8048_ram[reg_pnt + 6],
-	       intel8048_ram[reg_pnt + 7], acc, pc,
-	       (pc < 0x400) ? "bios" : "cart", op, lookup[op].mnemonic);
-      pc++;
-      }
-      else op = ROM(pc++);
+      if (DEBUG)
+	{
+	  op = ROM (pc);
+	  fprintf (stderr,
+		   "%06d\tBS: %d SP: 0x%02X REGPNT: 0x%02X CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\t\tACC: 0x%02X\tPC: 0x%03X (%s)\tOP: 0x%02X\t%s",
+		   bigben, (bs >> 4), sp, reg_pnt, cy, intel8048_ram[reg_pnt],
+		   intel8048_ram[reg_pnt + 1], intel8048_ram[reg_pnt + 2],
+		   intel8048_ram[reg_pnt + 3], intel8048_ram[reg_pnt + 4],
+		   intel8048_ram[reg_pnt + 5], intel8048_ram[reg_pnt + 6],
+		   intel8048_ram[reg_pnt + 7], acc, pc,
+		   (pc < 0x400) ? "bios" : "cart", op, lookup[op].mnemonic);
+	  pc++;
+	}
+      else
+	op = ROM (pc++);
 
       switch (op)
 	{
@@ -684,11 +686,12 @@ exec_8048 ()
 	  break;
 	case 0x76:		/* JF1 address */
 	  data = ROM (pc);
-	  fprintf (stderr, " 0x%02X", data);
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", data);
 	  if (f1)
-	      pc = (pc & 0xF00) | data;
+	    pc = (pc & 0xF00) | data;
 	  else
-	      fprintf (stderr, " tout droit");
+	    pc++;
 	  clk = 2;
 	  break;
 	case 0xB5:		/* CPL F1 */
@@ -874,11 +877,13 @@ exec_8048 ()
 	  acc = intel8048_ram[reg_pnt + (op - 0xF8)];
 	  break;
 	}
-      if (DEBUG) fprintf (stderr, "\n");
+      if (DEBUG)
+	fprintf (stderr, "\n");
       bigben++;
 
       master_clk += clk;
-      if(DEBUG) fprintf (stderr, "master_clk == %d\n", master_clk);
+      if (DEBUG)
+	fprintf (stderr, "master_clk == %d\n", master_clk);
 
       horizontal_clock += clk;
 
@@ -889,7 +894,8 @@ exec_8048 ()
 
       if (xirq_pending)
 	{
-	  if (DEBUG) fprintf (stderr, "xirq_pending -> ext_irq()\n");
+	  if (DEBUG)
+	    fprintf (stderr, "xirq_pending -> ext_irq()\n");
 	  ext_irq ();
 	}
 
@@ -908,7 +914,7 @@ exec_8048 ()
 		{
 		  timer_flag = 1;
 		  timer_irq ();
-		  draw_region (); // TODO: est-ce nécessaire ?
+		  draw_region ();	// TODO: est-ce nécessaire ?
 		}
 	    }
 	}
@@ -929,16 +935,19 @@ exec_8048 ()
 	    }
 	}
 
-      if (DEBUG) fprintf (stderr, "mstate == %d, master_clk == %d\n", mstate,
-	       master_clk);
+      if (DEBUG)
+	fprintf (stderr, "mstate == %d, master_clk == %d\n", mstate,
+		 master_clk);
       if (mstate == 0 && master_clk > START_VBLCLK)
 	{
-	  if (DEBUG) fprintf (stderr, "handle_vbl\n");
+	  if (DEBUG)
+	    fprintf (stderr, "handle_vbl\n");
 	  handle_start_vbl ();
 	}
       if (mstate == 1 && master_clk > END_VBLCLK)
 	{
-	  if (DEBUG) fprintf (stderr, "handle_evbl\n");
+	  if (DEBUG)
+	    fprintf (stderr, "handle_evbl\n");
 	  handle_end_vbl ();
 	}
     }
