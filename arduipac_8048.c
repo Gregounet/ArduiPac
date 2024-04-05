@@ -1,13 +1,14 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include "arduipac_8048.h"
 #include "arduipac_8245.h"
 #include "arduipac_vmachine.h"
 #include "c52_alien_invaders_usa_eu.h"
 #include "mnemonics.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define push(d) {intel8048_ram[sp++] = (d); if (sp > 23) sp = 8;}
 #define pull() (sp--, (sp < 8)?(sp=23):0, intel8048_ram[sp])
@@ -17,47 +18,48 @@
 
 uint8_t intel8048_ram[64];
 
-uint8_t psw;         // Program Status Word
-uint8_t cy;          // Carry                                                                            (Values 0x00 / 0x01 : bit 7 of PSW)
-uint8_t ac;          // Auxiliary Carry (for BCD operations)                                             (Values 0x00 / 0x40 : bit 6 of PSW)
-uint8_t f0;          // Built-in Flag #1                                                                 (Values 0x00 / 0x20 : bit 5 of PSW)
+uint8_t psw;			// Program Status Word
+uint8_t cy;			// Carry                                                                            (Values 0x00 / 0x01 : bit 7 of PSW)
+uint8_t ac;			// Auxiliary Carry (for BCD operations)                                             (Values 0x00 / 0x40 : bit 6 of PSW)
+uint8_t f0;			// Built-in Flag #1                                                                 (Values 0x00 / 0x20 : bit 5 of PSW)
 
-uint8_t bs;          // Bank Select (select which of the two built-in Register Bank is currently in use) (Values 0x00 / 0x10 : bit 4 of PSW) 
-uint8_t reg_pnt;     // Register Pointer (Registers are part of the built-in RAM)
+uint8_t bs;			// Bank Select (select which of the two built-in Register Bank is currently in use) (Values 0x00 / 0x10 : bit 4 of PSW) 
+uint8_t reg_pnt;		// Register Pointer (Registers are part of the built-in RAM)
 
-uint8_t sp;          // Stack Pointer                                                                    (Values 8 - 23 : saved as 3 bits in PSW bits 0 - 2)
+uint8_t sp;			// Stack Pointer                                                                    (Values 8 - 23 : saved as 3 bits in PSW bits 0 - 2)
 
-uint8_t f1;          // Built-in Flag #2
+uint8_t f1;			// Built-in Flag #2
 
-uint8_t p1;          // I/O Port #1
-uint8_t p2;          // I/O Port #2
+uint8_t p1;			// I/O Port #1
+uint8_t p2;			// I/O Port #2
 
-uint8_t executing_isr;	// Executing ISR
-		     
-uint8_t xirq_enabled;   // External Interupt Enabled
-uint8_t xirq_pending;   // External Interrupt Pending
+uint8_t executing_isr;		// Executing ISR
 
-uint8_t tirq_enabled;   // Timer Interupt Enabled
-uint8_t tirq_pending;   // Timer Interrupt Pending
+uint8_t xirq_enabled;		// External Interupt Enabled
+uint8_t xirq_pending;		// External Interrupt Pending
 
-uint8_t itimer;      // Internal Timer Value
-uint8_t timer_on;    // Timer is On
-uint8_t count_on;    // Counter is On
-uint8_t timer_flag;      // Timer Flag
+uint8_t tirq_enabled;		// Timer Interupt Enabled
+uint8_t tirq_pending;		// Timer Interrupt Pending
 
-uint16_t pc;         // Program Counter (12 bits = 0x0FFF)
+uint8_t itimer;			// Internal Timer Value
+uint8_t timer_on;		// Timer is On
+uint8_t count_on;		// Counter is On
+uint8_t timer_flag;		// Timer Flag
 
-uint16_t a11;        // Address 11th bit (control which 2kB ROM bank is in use) (values 0x000 / 0x800)
-uint16_t a11_backup; // Backup for Address 11th bit                             (values 0x000 / 0x800)
+uint16_t pc;			// Program Counter (12 bits = 0x0FFF)
+
+uint16_t a11;			// Address 11th bit (control which 2kB ROM bank is in use) (values 0x000 / 0x800)
+uint16_t a11_backup;		// Backup for Address 11th bit                             (values 0x000 / 0x800)
 
 uint32_t clk;
 uint32_t master_count;
 uint32_t bigben;
 
-void init_intel8048 ()
+void
+init_intel8048 ()
 {
-  pc         = 0x000;
-  a11        = 0x000;
+  pc = 0x000;
+  a11 = 0x000;
   a11_backup = 0x000;
 
   sp = 0x08;
@@ -74,22 +76,26 @@ void init_intel8048 ()
   itimer = 0x00;
   timer_on = 0;
   count_on = 0;
-  
-  executing_isr =  0;
+
+  executing_isr = 0;
 
   tirq_enabled = 0;
   tirq_pending = 0;
 
   xirq_enabled = 0;
-  xirq_pending  = 0;
+  xirq_pending = 0;
 
-  if (DEBUG) fprintf(stderr," Initializing intel8048_ram\n");
-  for (uint8_t i = 0 ; i < 0x40 ; i++) intel8048_ram[i] = 0;
+  if (DEBUG)
+    fprintf (stderr, " Initializing intel8048_ram\n");
+  for (uint8_t i = 0; i < 0x40; i++)
+    intel8048_ram[i] = 0;
 }
 
-void ext_irq ()
+void
+ext_irq ()
 {
-  if (DEBUG) fprintf(stderr, "\next_irq()\n");
+  if (DEBUG)
+    fprintf (stderr, "ext_irq()\n");
   int_clk = 5;
   if (xirq_enabled && !executing_isr)
     {
@@ -98,16 +104,18 @@ void ext_irq ()
       make_psw ();
       push (pc & 0xFF);
       push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-      pc = 0x003;                                                              // 0x003 = ISR vector
+      pc = 0x003;		// 0x003 = ISR vector
       a11_backup = a11;
-      a11 = 0x000;                                                             // ISR are always located in ROM Bank 0
+      a11 = 0x000;		// ISR are always located in ROM Bank 0
       clk = 2;
     }
 }
 
-void timer_irq ()
+void
+timer_irq ()
 {
-  if (DEBUG) fprintf(stderr, "\ntimer_irq()\n");
+  if (DEBUG)
+    fprintf (stderr, "timer_irq()\n");
   if (tirq_enabled && !executing_isr)
     {
       executing_isr = 2;
@@ -115,37 +123,42 @@ void timer_irq ()
       make_psw ();
       push (pc & 0xFF);
       push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-      pc = 0x07;   // 0x007 = Timer Interupt Service Routine Vector
+      pc = 0x07;		// 0x007 = Timer Interupt Service Routine Vector
       a11_backup = a11;
-      a11 = 0x000; // ISR always located in ROM Bank 0
+      a11 = 0x000;		// ISR always located in ROM Bank 0
       clk = 2;
     }
 }
 
-void exec_8048 ()
+void
+exec_8048 ()
 {
-  uint8_t acc;   // Accumulator
-  uint8_t op;    // Op-code
-  uint16_t addr; // Address
-  uint8_t data;  // Data
-  uint16_t temp; // Temporary value
-  if (DEBUG) fprintf(stderr, "Entering exec_8048()\n");
-  if (DEBUG) fprintf(stderr, "PC = 0x%03X\n",pc);
+  uint8_t acc;			// Accumulator
+  uint8_t op;			// Op-code
+  uint16_t addr;		// Address
+  uint8_t data;			// Data
+  uint16_t temp;		// Temporary value
+  if (DEBUG)
+    fprintf (stderr, "Entering exec_8048()\n");
 
   for (;;)
     {
       clk = 1;
 
       if (DEBUG) {
-        op = ROM (pc);
-      	fprintf(stderr, "%06d\tBS: %d SP: 0x%02X REGPNT: 0x%02X CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\t\tACC: 0x%02X\tPC: 0x%03X (%s)\tOP: 0x%02X\t%s",
-		      bigben,
-		      (bs >>4), sp, reg_pnt, cy,
-		      intel8048_ram[reg_pnt], intel8048_ram[reg_pnt+1], intel8048_ram[reg_pnt+2], intel8048_ram[reg_pnt+3],
-		      intel8048_ram[reg_pnt+4], intel8048_ram[reg_pnt+5], intel8048_ram[reg_pnt+6], intel8048_ram[reg_pnt+7],
-		      acc, pc, (pc < 0x400) ? "bios" : "cart", op, lookup[op].mnemonic);
-        pc++;
-      } else op = ROM (pc++);   // TODO: il n'y a à ce niveau-la aucune protection contre le franchissement de l'adresse 2047 -> 2048 (ligne d'adresse a11)
+      op = ROM (pc);
+      fprintf (stderr,
+	       "%06d\tBS: %d SP: 0x%02X REGPNT: 0x%02X CY: %d\tR0: 0x%02X R1: 0x%02X R2: 0x%02X R3: 0x%02X R4: 0x%02X R5: 0x%02X R6: 0x%02X R7 :0x%02X\t\tACC: 0x%02X\tPC: 0x%03X (%s)\tOP: 0x%02X\t%s",
+	       bigben, (bs >> 4), sp, reg_pnt, cy, intel8048_ram[reg_pnt],
+	       intel8048_ram[reg_pnt + 1], intel8048_ram[reg_pnt + 2],
+	       intel8048_ram[reg_pnt + 3], intel8048_ram[reg_pnt + 4],
+	       intel8048_ram[reg_pnt + 5], intel8048_ram[reg_pnt + 6],
+	       intel8048_ram[reg_pnt + 7], acc, pc,
+	       (pc < 0x400) ? "bios" : "cart", op, lookup[op].mnemonic);
+      pc++;
+      }
+      else op = ROM(pc++);
+
       switch (op)
 	{
 	case 0x00:		/* NOP */
@@ -202,41 +215,49 @@ void exec_8048 ()
 	case 0x03:		/* ADD A,#data */
 	case 0x13:		/* ADDC A,#data */
 	  data = ROM (pc++);
-	  if (DEBUG) fprintf(stderr, " 0x%02X",data);
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", data);
 	  ac = 0x00;
-	  switch(op) {
-		  case 0x03:
-	            if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
-	            temp = acc + data;
-		    break;
-		  case 0x13:  
-	            if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
-	            temp = acc + data + cy;
-		    break;
-	  }
-	  cy = (temp > 0xFF) ? 0x01 : 0x00 ;
+	  switch (op)
+	    {
+	    case 0x03:
+	      if (((acc & 0x0F) + (data & 0x0F)) > 0x0F)
+		ac = 0x40;
+	      temp = acc + data;
+	      break;
+	    case 0x13:
+	      if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F)
+		ac = 0x40;
+	      temp = acc + data + cy;
+	      break;
+	    }
+	  cy = (temp > 0xFF) ? 0x01 : 0x00;
 	  acc = (temp & 0xFF);
 	  clk = 2;
 	  break;
 	case 0xA3:		/* MOVP A,@A */
-	  if (DEBUG) fprintf(stderr, " (0x%02X)",ROM((pc & 0xF00) | acc));
+	  if (DEBUG)
+	    fprintf (stderr, " (0x%02X)", ROM ((pc & 0xF00) | acc));
 	  acc = ROM ((pc & 0xF00) | acc);
 	  clk = 2;
 	  break;
 	case 0x47:		/* SWAP A */
 	  data = (acc & 0xF0) >> 4;
-	  acc  <<= 4;
-	  acc  |= data;
+	  acc <<= 4;
+	  acc |= data;
 	  break;
 	case 0x77:		/* RR A */
 	  data = acc & 0x01;
 	  acc >>= 1;
-	  acc = (data) ? 0x80 : 0x7F ;
+	  acc = (data) ? 0x80 : 0x7F;
 	  break;
 	case 0xE7:		/* RL A */
 	  data = acc & 0x80;
 	  acc <<= 1;
-	  if (data) acc |= 0x01; else acc &= 0xFE;
+	  if (data)
+	    acc |= 0x01;
+	  else
+	    acc &= 0xFE;
 	  break;
 	case 0x04:		/* JMP */
 	case 0x24:		/* JMP */
@@ -247,8 +268,9 @@ void exec_8048 ()
 	case 0xC4:		/* JMP */
 	case 0xE4:		/* JMP */
 	  pc = ROM (pc) | a11;
-          pc |= ((uint16_t) (op & 0xE0)) << 3;
-	  if (DEBUG) fprintf(stderr, " 0x%03X",pc);
+	  pc |= ((uint16_t) (op & 0xE0)) << 3;
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%03X", pc);
 	  clk = 2;
 	  break;
 	case 0x05:		/* EN I */
@@ -263,7 +285,7 @@ void exec_8048 ()
 	  break;
 	case 0x09:		/* IN A,Pp */
 	case 0x0A:		/* IN A,Pp */
-	  acc = (op == 0x09) ? p1 : read_p2() ;
+	  acc = (op == 0x09) ? p1 : read_p2 ();
 	  clk = 2;
 	  break;
 	case 0x0C:		/* MOVD A,P4 */
@@ -286,14 +308,22 @@ void exec_8048 ()
 	case 0xD2:		/* JBb address */
 	case 0xF2:		/* JBb address */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " (0x%02X)",data);
-	  if (acc & (0x01 << ((op - 0x12) / 0x20))) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " (0x%02X)", data);
+	  if (acc & (0x01 << ((op - 0x12) / 0x20)))
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  clk = 2;
 	  break;
 	case 0x16:		/* JTF */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " (0x%02X)",pc);
-	  if (timer_flag) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " (0x%02X)", pc);
+	  if (timer_flag)
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  timer_flag = 0;
 	  clk = 2;
 	  break;
@@ -309,16 +339,18 @@ void exec_8048 ()
 	  break;
 	case 0x20:		/* XCH A,@Ri */
 	case 0x21:		/* XCH A,@Ri */
-	  data                                              = acc;
-	  acc                                               = intel8048_ram[intel8048_ram[reg_pnt + (op - 0x20)]];
+	  data = acc;
+	  acc = intel8048_ram[intel8048_ram[reg_pnt + (op - 0x20)]];
 	  intel8048_ram[intel8048_ram[reg_pnt + (op - 0x20)]] = data;
 	case 0x23:		/* MOV A,#data */
-	  if (DEBUG) fprintf(stderr, " 0x%02X",ROM(pc));
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", ROM (pc));
 	  acc = ROM (pc++);
 	  clk = 2;
 	  break;
 	case 0x53:		/* ANL A,#data */
-	  if (DEBUG) fprintf(stderr, " 0x%02X",ROM(pc));
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", ROM (pc));
 	  acc &= ROM (pc++);
 	  clk = 2;
 	  break;
@@ -339,15 +371,15 @@ void exec_8048 ()
 	case 0x2D:		/* XCH A,Rr */
 	case 0x2E:		/* XCH A,Rr */
 	case 0x2F:		/* XCH A,Rr */
-	  data                  = acc;
-	  acc                   = intel8048_ram[reg_pnt + (op - 0x28)];
-	  intel8048_ram[reg_pnt] = data;
+	  data = acc;
+	  acc = intel8048_ram[reg_pnt + (op - 0x28)];
+	  intel8048_ram[reg_pnt + (op - 0x28)] = data;
 	  break;
 	case 0x30:		/* XCHD A,@Ri */
 	case 0x31:		/* XCHD A,@Ri */
 	  addr = intel8048_ram[reg_pnt + (op - 0x30)];
-	  intel8048_ram[addr] = (intel8048_ram[addr] & 0xF0) | (acc                & 0x0F);
-	  acc                = (acc                & 0xF0) | (intel8048_ram[addr] & 0x0F);
+	  intel8048_ram[addr] = (intel8048_ram[addr] & 0xF0) | (acc & 0x0F);
+	  acc = (acc & 0xF0) | (intel8048_ram[addr] & 0x0F);
 	  break;
 	case 0x25:		/* EN TCNTI */
 	  tirq_enabled = 1;
@@ -358,7 +390,10 @@ void exec_8048 ()
 	  break;
 	case 0x39:		/* OUTL P1,A */
 	case 0x3A:		/* OUTL P2,A */
-	  if (op == 0x39) write_p1 (acc); else p2 = acc;
+	  if (op == 0x39)
+	    write_p1 (acc);
+	  else
+	    p2 = acc;
 	  clk = 2;
 	  break;
 	case 0x3C:		/* MOVD P4,A */
@@ -370,11 +405,14 @@ void exec_8048 ()
 	  break;
 	case 0x40:		/* ORL A,@Ri */
 	case 0x41:		/* ORL A,@Ri */
-	  if (DEBUG) fprintf(stderr, " (0x%02X)",intel8048_ram[intel8048_ram[reg_pnt + (op - 0x40)]]);
+	  if (DEBUG)
+	    fprintf (stderr, " (0x%02X)",
+		     intel8048_ram[intel8048_ram[reg_pnt + (op - 0x40)]]);
 	  acc |= intel8048_ram[intel8048_ram[reg_pnt + (op - 0x40)]];
 	  break;
 	case 0x43:		/* ORL A,#data */
-	  if (DEBUG) fprintf(stderr, " 0x%02X",ROM(pc));
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", ROM (pc));
 	  acc |= ROM (pc++);
 	  clk = 2;
 	  break;
@@ -397,21 +435,30 @@ void exec_8048 ()
 	case 0x46:		/* JNT1 */
 	case 0x56:		/* JT1 */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " 0x%02X", data);
-	  switch(op){
-            case 0x46:
-              if (!read_t1 ()) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", data);
+	  switch (op)
+	    {
+	    case 0x46:
+	      if (!read_t1 ())
+		pc = (pc & 0xF00) | data;
+	      else
+		pc++;
 	      break;
-            case 0x56:
-              if (read_t1 ()) pc = (pc & 0xF00) | data; else pc++;
+	    case 0x56:
+	      if (read_t1 ())
+		pc = (pc & 0xF00) | data;
+	      else
+		pc++;
 	      break;
-	  }
-          clk = 2;
+	    }
+	  clk = 2;
 	  break;
 	case 0x57:		/* DA A */
 	  if (((acc & 0x0F) > 0x09) || ac)
 	    {
-	      if (acc > 0xF9) cy = 0x01;
+	      if (acc > 0xF9)
+		cy = 0x01;
 	      acc += 6;
 	    }
 	  data = (acc & 0xF0) >> 4;
@@ -457,7 +504,7 @@ void exec_8048 ()
 	  acc ^= intel8048_ram[reg_pnt + (op - 0xD8)];
 	  break;
 	case 0xE3:		/* MOVP3 A,@A */
-          addr = 0x300 | acc;
+	  addr = 0x300 | acc;
 	  acc = ROM (addr);
 	  clk = 2;
 	  break;
@@ -466,24 +513,30 @@ void exec_8048 ()
 	  cy = 0x00;
 	  ac = 0x00;
 	  data = intel8048_ram[intel8048_ram[reg_pnt] + (op - 0x60)];
-	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F)
+	    ac = 0x40;
 	  temp = acc + data;
-	  if (temp > 0xFF) cy = 0x01;
+	  if (temp > 0xFF)
+	    cy = 0x01;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x67:		/* RRC A */
 	  data = cy;
-	  cy   = acc & 0x01;
-	  acc  >>= 1;
-	  if (data) acc |= 0x80;
-	  else acc &= 0x7F;        // TODO je pense que cette ligne est superflue
+	  cy = acc & 0x01;
+	  acc >>= 1;
+	  if (data)
+	    acc |= 0x80;
+	  else
+	    acc &= 0x7F;	// TODO je pense que cette ligne est superflue
 	  break;
 	case 0xF7:		/* RLC A */
 	  data = cy;
-	  cy   = (acc & 0x80) >> 7;
-	  acc  <<= 1;
-	  if (data) acc |= 0x01;
-	  else acc &= 0xFE;        // TODO je pense que cette ligne est superflue
+	  cy = (acc & 0x80) >> 7;
+	  acc <<= 1;
+	  if (data)
+	    acc |= 0x01;
+	  else
+	    acc &= 0xFE;	// TODO je pense que cette ligne est superflue
 	  break;
 	case 0x68:		/* ADD A,Rr */
 	case 0x69:		/* ADD A,Rr */
@@ -496,19 +549,23 @@ void exec_8048 ()
 	  cy = 0x00;
 	  ac = 0x00;
 	  data = intel8048_ram[reg_pnt + (op - 0x68)];
-	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F)) > 0x0F)
+	    ac = 0x40;
 	  temp = acc + data;
-	  if (temp > 0xFF) cy = 0x01;
+	  if (temp > 0xFF)
+	    cy = 0x01;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x70:		/* ADDC A,@Ri */
 	case 0x71:		/* ADDC A,@Ri */
 	  ac = 0x00;
 	  data = intel8048_ram[intel8048_ram[reg_pnt + (op - 0x70)]];
-	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F)
+	    ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0x00;
-	  if (temp > 0xFF) cy = 0x01;
+	  if (temp > 0xFF)
+	    cy = 0x01;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x78:		/* ADDC A,Rr */
@@ -521,10 +578,12 @@ void exec_8048 ()
 	case 0x7F:		/* ADDC A,Rr */
 	  ac = 0x00;
 	  data = intel8048_ram[reg_pnt + (op - 0x78)];
-	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F) ac = 0x40;
+	  if (((acc & 0x0F) + (data & 0x0F) + cy) > 0x0F)
+	    ac = 0x40;
 	  temp = acc + data + cy;
 	  cy = 0x00;
-	  if (temp > 0xFF) cy = 0x01;
+	  if (temp > 0xFF)
+	    cy = 0x01;
 	  acc = (temp & 0xFF);
 	  break;
 	case 0x80:		/* MOVX A,@Ri */
@@ -534,14 +593,22 @@ void exec_8048 ()
 	  break;
 	case 0x86:		/* JNI address */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " 0x%02X", data);
-	  if (int_clk > 0) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", data);
+	  if (int_clk > 0)
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  clk = 2;
 	  break;
 	case 0x89:		/* ORL Pp,#data */
 	case 0x8A:		/* ORL Pp,#data */
-	  if (DEBUG) fprintf(stderr, " 0x%02X",ROM(pc));
-	  if (op == 0x89) write_p1 (p1 | ROM (pc++)); else p2 |= ROM (pc++);
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", ROM (pc));
+	  if (op == 0x89)
+	    write_p1 (p1 | ROM (pc++));
+	  else
+	    p2 |= ROM (pc++);
 	  clk = 2;
 	  break;
 	case 0x8C:		/* ORLD P4,A */
@@ -578,8 +645,12 @@ void exec_8048 ()
 	  break;
 	case 0x99:		/* ANL Pp,#data */
 	case 0x9A:		/* ANL Pp,#data */
-	  if (DEBUG) fprintf(stderr, " 0x%02X",ROM(pc));
-	  if (op == 0x99) write_p1 (p1 & ROM (pc++)); else p2 &= ROM (pc++);
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", ROM (pc));
+	  if (op == 0x99)
+	    write_p1 (p1 & ROM (pc++));
+	  else
+	    p2 &= ROM (pc++);
 	  clk = 2;
 	  break;
 	case 0x9C:		/* ANLD P4,A */
@@ -597,8 +668,12 @@ void exec_8048 ()
 	  break;
 	case 0xB6:		/* JF0 address */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " 0x%02X", data);
-	  if (f0) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", data);
+	  if (f0)
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  clk = 2;
 	  break;
 	case 0x95:		/* CPL F0 */
@@ -609,8 +684,17 @@ void exec_8048 ()
 	  break;
 	case 0x76:		/* JF1 address */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " 0x%02X", data);
-	  if (f1) pc = (pc & 0xF00) | data; else pc++;
+	  fprintf (stderr, " 0x%02X", data);
+	  if (f1)
+	    {
+	      fprintf (stderr, " branchement\n");
+	      pc = (pc & 0xF00) | data;
+	    }
+	  else
+	    {
+	      fprintf (stderr, " tout droit");
+	      pc++;
+	    }
 	  clk = 2;
 	  break;
 	case 0xB5:		/* CPL F1 */
@@ -631,7 +715,8 @@ void exec_8048 ()
 	  break;
 	case 0xB0:		/* MOV @Ri,#data */
 	case 0xB1:		/* MOV @Ri,#data */
-	  if (DEBUG) fprintf(stderr, " 0x%02X",ROM(pc));
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", ROM (pc));
 	  intel8048_ram[intel8048_ram[reg_pnt + (op - 0xB1)]] = ROM (pc++);
 	  clk = 2;
 	  break;
@@ -648,7 +733,8 @@ void exec_8048 ()
 	case 0xBD:		/* MOV Rr,#data */
 	case 0xBE:		/* MOV Rr,#data */
 	case 0xBF:		/* MOV Rr,#data */
-	  if (DEBUG) fprintf(stderr, " 0x%02X",ROM(pc));
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", ROM (pc));
 	  intel8048_ram[reg_pnt + (op - 0xB8)] = ROM (pc++);
 	  clk = 2;
 	  break;
@@ -659,14 +745,22 @@ void exec_8048 ()
 	  break;
 	case 0xC6:		/* JZ address */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " 0x%02X", data);
-	  if (acc == 0) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", data);
+	  if (acc == 0)
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  clk = 2;
 	  break;
 	case 0x96:		/* JNZ address */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " 0x%02X",data);
-	  if (acc != 0) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", data);
+	  if (acc != 0)
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  clk = 2;
 	  break;
 	case 0xC7:		/* MOV A,PSW */
@@ -698,32 +792,42 @@ void exec_8048 ()
 	  acc ^= intel8048_ram[intel8048_ram[reg_pnt + (op - 0xD0)]];
 	  break;
 	case 0xD3:		/* XRL A,#data */
-	  if (DEBUG) fprintf(stderr, " 0x%02X",ROM(pc));
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", ROM (pc));
 	  acc ^= ROM (pc++);
 	  clk = 2;
 	  break;
-	case 0xE5:		/* SEL MB0 */ 
-	  a11        = 0x000;
+	case 0xE5:		/* SEL MB0 */
+	  a11 = 0x000;
 	  a11_backup = 0x000;
 	  break;
 	case 0xF5:		/* SEL MB1 */
-          if (executing_isr) a11_backup = 0x800;
+	  if (executing_isr)
+	    a11_backup = 0x800;
 	  else
-	  {
-		  a11        = 0x800;
-		  a11_backup = 0x800;
-	  }
+	    {
+	      a11 = 0x800;
+	      a11_backup = 0x800;
+	    }
 	  break;
 	case 0xF6:		/* JC address */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " (0x%02X)",data);
-	  if (cy) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " (0x%02X)", data);
+	  if (cy)
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  clk = 2;
 	  break;
 	case 0xE6:		/* JNC address */
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " (0x%02X)",data);
-	  if (!cy) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " (0x%02X)", data);
+	  if (!cy)
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  break;
 	  clk = 2;
 	case 0xE8:		/* DJNZ Rr,address */
@@ -736,8 +840,12 @@ void exec_8048 ()
 	case 0xEF:		/* DJNZ Rr,address */
 	  intel8048_ram[reg_pnt + (op - 0xE8)]--;
 	  data = ROM (pc);
-	  if (DEBUG) fprintf(stderr, " 0x%02X",data);
-	  if (intel8048_ram[reg_pnt + (op - 0xE8)] != 0) pc = (pc & 0xF00) | data; else pc++;
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%02X", data);
+	  if (intel8048_ram[reg_pnt + (op - 0xE8)] != 0)
+	    pc = (pc & 0xF00) | data;
+	  else
+	    pc++;
 	  clk = 2;
 	  break;
 	case 0xF0:		/* MOV A,@Ri */
@@ -756,8 +864,9 @@ void exec_8048 ()
 	  pc++;
 	  push (pc & 0xFF);
 	  push (((pc & 0xF00) >> 8) | (psw & 0xF0));
-	  pc = a11 | ((uint16_t)(op & 0xE0)) << 3 | ROM(pc-1) ;
-	  if (DEBUG) fprintf(stderr, " 0x%03X", pc);
+	  pc = a11 | ((uint16_t) (op & 0xE0)) << 3 | ROM (pc - 1);
+	  if (DEBUG)
+	    fprintf (stderr, " 0x%03X", pc);
 	  clk = 2;
 	  break;
 	case 0xF8:		/* MOV A,Rr */
@@ -771,43 +880,72 @@ void exec_8048 ()
 	  acc = intel8048_ram[reg_pnt + (op - 0xF8)];
 	  break;
 	}
-      if (DEBUG) {fprintf(stderr, "\n"); bigben++;}
+      if (DEBUG) fprintf (stderr, "\n");
+      bigben++;
+
       master_clk += clk;
+      if(DEBUG) printf (stderr, "master_clk == %d\n", master_clk);
+
       horizontal_clock += clk;
-      
-      if (int_clk > clk) int_clk -= clk; else int_clk = 0;
 
-      if (xirq_pending) ext_irq ();
-      if (tirq_pending) timer_irq ();
+      if (int_clk > clk)
+	int_clk -= clk;
+      else
+	int_clk = 0;
 
-      if (horizontal_clock > LINECNT - 1) {
+      if (xirq_pending)
+	{
+	  if (DEBUG) fprintf (stderr, "xirq_pending -> ext_irq()\n");
+	  ext_irq ();
+	}
+
+      if (tirq_pending)
+	timer_irq ();
+
+      if (horizontal_clock > LINECNT - 1)
+	{
 	  horizontal_clock -= LINECNT;
-	  if (intel8245_ram[0xA0] & 0x01) ext_irq ();                    // Horizontal Interupt
-	  if (count_on && mstate == 0) {
-	      itimer++;                                                               // TODO pourquoi incrémenter itimer ici ?
-	      if (itimer == 0x00) {
+	  if (intel8245_ram[0xA0] & 0x01)
+	    ext_irq ();
+	  if (count_on && mstate == 0)
+	    {
+	      itimer++;
+	      if (itimer == 0x00)
+		{
 		  timer_flag = 1;
 		  timer_irq ();
-		  //draw_region ();
+		  draw_region (); // TODO: est-ce nécessaire ?
 		}
 	    }
 	}
-      draw_display();
+      draw_display ();
 
-      if (timer_on) {
+      if (timer_on)
+	{
 	  master_count += clk;
-	  if (master_count > 31) { // TODO WTf ce 31 ? Ca divise la clock par 32...
+	  if (master_count > 31)
+	    {			// TODO WTf ce 31 ? Ca divise la clock par 32...
 	      master_count -= 31;
 	      itimer++;
-	      if (itimer == 0x00) {
+	      if (itimer == 0x00)
+		{
 		  timer_flag = 1;
 		  timer_irq ();
 		}
 	    }
 	}
 
-      if (mstate == 0 && master_clk > START_VBLCLK)  handle_start_vbl ();
-      if (mstate == 1 && master_clk > END_VBLCLK) handle_end_vbl ();
-
+      if (DEBUG) fprintf (stderr, "mstate == %d, master_clk == %d\n", mstate,
+	       master_clk);
+      if (mstate == 0 && master_clk > START_VBLCLK)
+	{
+	  if (DEBUG) fprintf (stderr, "handle_vbl\n");
+	  handle_start_vbl ();
+	}
+      if (mstate == 1 && master_clk > END_VBLCLK)
+	{
+	  if (DEBUG) fprintf (stderr, "handle_evbl\n");
+	  handle_end_vbl ();
+	}
     }
 }
